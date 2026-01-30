@@ -2,31 +2,15 @@ package swarm.main;
 
 import swarm.infra.MessageBus;
 import swarm.messages.*;
+import swarm.subsystems.FireIncidentSubsystem;
 
 public class SystemMain {
 
     public static void main(String[] args) {
         MessageBus bus = new MessageBus(50);
 
-        // Temporary demo producer (FireIncident stand-in)
-        Thread fireProducer = new Thread(() -> {
-            try {
-                bus.fireEvents.put(new FireEvent(
-                        System.currentTimeMillis(),
-                        1,
-                        EventType.FIRE_DETECTED,
-                        Severity.MODERATE
-                ));
-                bus.fireEvents.put(new FireEvent(
-                        System.currentTimeMillis(),
-                        2,
-                        EventType.DRONE_REQUEST,
-                        Severity.LOW
-                ));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }, "FireIncidentStub");
+        FireIncidentSubsystem fireSubsystem = new FireIncidentSubsystem(bus,"Sample_event_file.csv");
+        Thread fireThread = new Thread(fireSubsystem, "FireIncidentThread");
 
         // Temporary demo consumer/producer (Scheduler stand-in)
         Thread schedulerStub = new Thread(() -> {
@@ -73,6 +57,7 @@ public class SystemMain {
         schedulerStub.start();
         droneStub.start();
         statusConsumer.start();
-        fireProducer.start();
+        //fireProducer.start();
+        fireThread.start();
     }
 }
