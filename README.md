@@ -14,6 +14,17 @@ The project follows an iterative and incremental development process. GitHub Iss
 #### Umniyah
 #### Armin
 #### Liam
+- Designed and implemented the `FireIncidentSubsystem`
+  -  Reads fire events from csv file.
+  -  publishes `FireEvent` messages to the `MessageBus`
+  -  Listens for `DroneStatus` updates and prints drone state and drone 
+  -  Separate threads for reading events and handling statuses.
+
+- Designed and implemented the `DroneSubsystem`
+  -  Listens for `Dronecommand` messages from Scheduler. 
+  -  Simulates drone en route and extinguishing actions
+  -  Published `DroneStatus` updates back to the `MessageBus`
+
 #### Vincent
 
 ### Documentation and Submissions
