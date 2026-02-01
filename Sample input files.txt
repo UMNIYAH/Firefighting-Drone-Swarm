@@ -1,0 +1,5 @@
+These are sample input files that your project should use for events and zone coordinates.
+
+Note: for the zone file, the x,y coordinates are separated with a semicolon not commas.
+
+(x;y)
