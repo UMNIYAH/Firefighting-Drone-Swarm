@@ -13,6 +13,16 @@ The project follows an iterative and incremental development process. GitHub Iss
 ### Team Contribution - Iteration 1
 #### Umniyah
 #### Armin
+- Implemented the Test files:
+  - DroneSubsystemTest
+  - FireIncidentSubsystemTest
+  - IntegrationTest
+  - MessageStructureTest
+  - MonitorQueueTest
+  - SchedulerTest
+
+- Designed and Modeled the UML class diagram
+
 #### Liam
 - Designed and implemented the `FireIncidentSubsystem`
   -  Reads fire events from csv file.
