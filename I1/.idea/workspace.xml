@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="84d792ed-b266-4451-bec6-f1235640ed3c" name="Changes" comment="Simple GUI implementation">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Final Project Submission/SYSC3303A W26 Final Grading Rubric.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I0/Analysis.docx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I0/Analysis.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I0/Firefighting Drone Swarm System - Iteration 0.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I0/Firefighting Drone Swarm System - Iteration 0.zip" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I0/Front Page.docx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I0/Front Page.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I0/Iteration0_DroneParameters_Team(Sheet1).csv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I0/Sheet.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I1/SYSC3303A W26 Iteration 1 Grading Rubric.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I2/SYSC3303A W26 Iteration 2 Grading Rubric.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I3/SYSC3303A W26 Iteration 3 Grading Rubric.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I4/SYSC3303A W26 Iteration 4 Grading Rubric.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/I5/SYSC3303A W26 Iteration 5 Grading Rubric.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Project Specification.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/SYSC3303A W26 Project V2.1.pdf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Sample input files.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/Sample_event_file.csv" beforeDir="false" afterPath="$PROJECT_DIR$/Sample_event_file.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/UML/uml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/sample_zone_file.csv" beforeDir="false" afterPath="$PROJECT_DIR$/sample_zone_file.csv" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/swarm/main/SystemMain.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/swarm/main/SystemMain.java" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_BRANCH_BY_REPOSITORY">
+      <map>
+        <entry key="$PROJECT_DIR$" value="feature/gui" />
+      </map>
+    </option>
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;Vynicul&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/UMNIYAH/Firefighting-Drone-Swarm.git&quot;,
+    &quot;accountId&quot;: &quot;eaaa2eb8-8f19-4110-bf6a-9407035a1187&quot;
+  }
+}</component>
+  <component name="McpProjectServerCommands">
+    <McpServerCommand sourceId="UserConfigurationSource">
+      <option name="allowedToolsNames" />
+      <option name="enabled" value="true" />
+      <option name="name" value="" />
+      <option name="programPath" value="" />
+      <option name="arguments" value="" />
+      <option name="workingDirectory" value="" />
+      <envs />
+    </McpServerCommand>
+    <McpServerCommand sourceId="UserConfigurationSource">
+      <option name="allowedToolsNames" />
+      <option name="enabled" value="true" />
+      <option name="name" value="" />
+      <option name="programPath" value="" />
+      <option name="arguments" value="" />
+      <option name="workingDirectory" value="" />
+      <envs />
+    </McpServerCommand>
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 4
+}</component>
+  <component name="ProjectId" id="390LvKAndbxLdtyz66HfbNxmkVq" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Application.Main.executor&quot;: &quot;Run&quot;,
+    &quot;Application.SimulatorGUI.executor&quot;: &quot;Run&quot;,
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;com.intellij.ml.llm.matterhorn.ej.ui.settings.DefaultModelSelectionForGA.v1&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;UML&quot;,
+    &quot;junie.onboarding.icon.badge.shown&quot;: &quot;true&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/vingu/Downloads/Firefighting-Drone-Swarm&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;onboarding.tips.debug.path&quot;: &quot;C:/Users/vingu/Downloads/Firefighting-Drone-Swarm/src/Main.java&quot;,
+    &quot;project.structure.last.edited&quot;: &quot;Modules&quot;,
+    &quot;project.structure.proportion&quot;: &quot;0.15&quot;,
+    &quot;project.structure.side.proportion&quot;: &quot;0.2&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;preferences.lookFeel&quot;,
+    &quot;to.speed.mode.migration.done&quot;: &quot;true&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RunManager">
+    <configuration default="true" type="JetRunConfigurationType">
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+    <configuration default="true" type="KotlinStandaloneScriptRunConfigurationType">
+      <option name="filePath" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="PythonConfigurationType" factoryName="Python">
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs>
+        <env name="PYTHONUNBUFFERED" value="1" />
+      </envs>
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <module name="" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="SCRIPT_NAME" value="" />
+      <option name="PARAMETERS" value="" />
+      <option name="SHOW_COMMAND_LINE" value="false" />
+      <option name="EMULATE_TERMINAL" value="false" />
+      <option name="MODULE_MODE" value="false" />
+      <option name="REDIRECT_INPUT" value="false" />
+      <option name="INPUT_FILE" value="" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="Python.FlaskServer">
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <module name="" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <option name="launchJavascriptDebuger" value="false" />
+      <method v="2" />
+    </configuration>
+    <configuration default="true" type="Tox" factoryName="Tox">
+      <option name="ENV_FILES" value="" />
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
+      <method v="2" />
+    </configuration>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-9823dce3aa75-bf35d07a577b-intellij.indexing.shared.core-IU-252.27397.103" />
+        <option value="bundled-js-predefined-d6986cc7102b-3aa1da707db6-JavaScript-IU-252.27397.103" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="84d792ed-b266-4451-bec6-f1235640ed3c" name="Changes" comment="" />
+      <created>1769828270725</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1769828270725</updated>
+      <workItem from="1769828272758" duration="2309000" />
+      <workItem from="1769907477401" duration="1534000" />
+      <workItem from="1770317407907" duration="1136000" />
+      <workItem from="1770318618973" duration="558000" />
+      <workItem from="1770319428021" duration="320000" />
+    </task>
+    <task id="LOCAL-00001" summary="WIP: Scheduler thread implementation">
+      <option name="closed" value="true" />
+      <created>1769829304817</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1769829304817</updated>
+    </task>
+    <task id="LOCAL-00002" summary="WIP: Scheduler thread implementation">
+      <option name="closed" value="true" />
+      <created>1769829541375</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1769829541375</updated>
+    </task>
+    <task id="LOCAL-00003" summary="WIP: Scheduler thread implementation 2">
+      <option name="closed" value="true" />
+      <created>1769829818291</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1769829818291</updated>
+    </task>
+    <task id="LOCAL-00004" summary="Simple GUI implementation">
+      <option name="closed" value="true" />
+      <created>1769907937997</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1769907937997</updated>
+    </task>
+    <task id="LOCAL-00005" summary="Simple GUI implementation">
+      <option name="closed" value="true" />
+      <created>1769908557947</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1769908557947</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="origin/feature/gui" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="WIP: Scheduler thread implementation" />
+    <MESSAGE value="WIP: Scheduler thread implementation 2" />
+    <MESSAGE value="Simple GUI implementation" />
+    <option name="LAST_COMMIT_MESSAGE" value="Simple GUI implementation" />
+  </component>
+</project>
