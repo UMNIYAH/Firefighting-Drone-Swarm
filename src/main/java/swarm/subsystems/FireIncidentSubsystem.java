@@ -24,8 +24,8 @@ import java.io.IOException;
  * Iteration 1:
  */
 public class FireIncidentSubsystem implements Runnable{
-    private MessageBus bus;
-    private String inputFileName;
+    private final MessageBus bus;
+    private final String inputFileName;
 
     public FireIncidentSubsystem(MessageBus bus, String inputFileName) {
         this.bus = bus;
@@ -34,31 +34,22 @@ public class FireIncidentSubsystem implements Runnable{
 
     @Override
     public void run() {
-        // Thread that reads fire events from the CSV file and sends the to the MessageBus
-        Thread reader = new Thread(() -> {
-            try {
-                readIncidents(inputFileName);
-            } catch (IOException | InterruptedException e) {
-                e.printStackTrace();
-            }
-        }, "FireEventReader");
+        try {
+            readIncidents(inputFileName);
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
 
         // Thread that listens for drone statuses from the MessageBus
-        Thread statusHandler = new Thread(() -> {
-            try {
-                while (true) {
-                    DroneStatus status = bus.droneStatuses.take();
-                    System.out.println("[FireIncidentSubsystem] Drone " + status.state() + " at zone" + status.currentZoneId());
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+        try {
+            while (true) {
+                DroneStatus status = bus.droneStatusToFire.take();
+                System.out.println("[FireIncidentSubsystem] Drone " + status.state() + " at zone" + status.currentZoneId());
             }
-        },"DroneStatusHandler");
-
-        reader.start();
-        statusHandler.start();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
-
 
     // Reads fire events from a csv file and passes them to MessageBus
     private void readIncidents(String inputFileName) throws IOException, InterruptedException {
