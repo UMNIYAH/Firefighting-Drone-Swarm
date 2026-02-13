@@ -57,7 +57,6 @@ public class SystemMain {
         schedulerStub.start();
         droneStub.start();
         statusConsumer.start();
-        //fireProducer.start();
         fireThread.start();
     }
 }
