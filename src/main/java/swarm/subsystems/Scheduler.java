@@ -86,6 +86,8 @@ public class Scheduler implements Runnable {
             while (true) {
                 DroneStatus status = bus.droneStatuses.take();
                 System.out.println("[Scheduler] Received drone status: " + status);
+              
+                bus.droneStatusToFire.put(status);
 
                 // Iteration 1: consider drone free once it reports ARRIVED
                 if ("ARRIVED".equalsIgnoreCase(status.state())) {
