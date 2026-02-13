@@ -20,9 +20,13 @@ public class MessageBus {
     // Drone -> Scheduler
     public final MonitorQueue<DroneStatus> droneStatuses;
 
+    // Scheduler -> FireIncident
+    public final MonitorQueue<DroneStatus> droneStatusToFire;
+
     public MessageBus(int capacity) {
         this.fireEvents = new MonitorQueue<>(capacity);
         this.droneCommands = new MonitorQueue<>(capacity);
         this.droneStatuses = new MonitorQueue<>(capacity);
+        this.droneStatusToFire = new MonitorQueue<>(capacity);
     }
 }
