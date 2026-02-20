@@ -34,29 +34,39 @@ public class FireIncidentSubsystem implements Runnable{
 
     @Override
     public void run() {
-        // Thread that reads fire events from the CSV file and sends the to the MessageBus
-        Thread reader = new Thread(() -> {
-            try {
-                readIncidents(inputFileName);
-            } catch (IOException | InterruptedException e) {
-                e.printStackTrace();
-            }
-        }, "FireEventReader");
 
-        // Thread that listens for drone statuses from the MessageBus
-        Thread statusHandler = new Thread(() -> {
-            try {
-                while (true) {
-                    DroneStatus status = bus.droneStatuses.take();
-                    System.out.println("[FireIncidentSubsystem] Drone " + status.state() + " at zone" + status.currentZoneId());
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        },"DroneStatusHandler");
+        // Event-reader running
+        Thread readerThread = new Thread(this::runEventReader, "FireEventReader");
 
-        reader.start();
-        statusHandler.start();
+        // Status Listener
+        Thread statusListenerThread = new Thread(this::runStatusListener, "DroneStatusListener");
+
+        readerThread.start();
+        statusListenerThread.start();
+    }
+
+    // Reads file and pushes events to the Scheduler
+    private void runEventReader(){
+        try{
+            readIncidents(inputFileName);
+            System.out.println("[FireIncident] Completed reading events from file.");
+        } catch (IOException | InterruptedException e){
+            System.err.println("[FireIncident] Reader encountered an error.");
+        }
+    }
+
+    // Loop: Waits for and logs drone status updates.
+    private void runStatusListener(){
+        try{
+            while(!Thread.currentThread().isInterrupted()){
+                // Event driven: blocks until a message exists
+                DroneStatus status = bus.droneStatuses.take();
+                // Logging to verify communication
+                System.out.println("[FireIncident] Drone Status: " + status);
+            }
+        } catch (InterruptedException e){
+            Thread.currentThread().interrupt();
+        }
     }
 
 
