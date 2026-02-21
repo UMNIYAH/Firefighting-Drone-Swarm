@@ -69,7 +69,6 @@ public class FireIncidentSubsystem implements Runnable{
         }
     }
 
-
     // Reads fire events from a csv file and passes them to MessageBus
     private void readIncidents(String inputFileName) throws IOException, InterruptedException {
         try (BufferedReader br = new BufferedReader(new FileReader(inputFileName))) {
