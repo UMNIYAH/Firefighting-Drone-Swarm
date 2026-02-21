@@ -1,63 +1,33 @@
 package swarm.main;
 
 import swarm.infra.MessageBus;
+import swarm.infra.ZoneManager;
 import swarm.messages.*;
+import swarm.subsystems.DroneSubsystem;
 import swarm.subsystems.FireIncidentSubsystem;
+import swarm.subsystems.Scheduler;
+
+import java.io.IOException;
 
 public class SystemMain {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
+
         MessageBus bus = new MessageBus(50);
+        ZoneManager zoneManager = new ZoneManager("sample_zone_file.csv");
 
         FireIncidentSubsystem fireSubsystem = new FireIncidentSubsystem(bus,"Sample_event_file.csv");
         Thread fireThread = new Thread(fireSubsystem, "FireIncidentThread");
 
-        // Temporary demo consumer/producer (Scheduler stand-in)
-        Thread schedulerStub = new Thread(() -> {
-            try {
-                while (true) {
-                    FireEvent ev = bus.fireEvents.take();
-                    System.out.println("[Scheduler] got event: " + ev);
+        Scheduler scheduler = new Scheduler(bus);
+        Thread schedulerThread = new Thread(scheduler,"SchedulerThread");
 
-                    // Minimal dispatch: always send drone 1
-                    bus.droneCommands.put(new DroneCommand(1, ev.zoneId(), ev.severity()));
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }, "SchedulerStub");
+        DroneSubsystem droneSubsystem = new DroneSubsystem(bus,1,zoneManager);
+        Thread droneThread = new Thread(droneSubsystem, "DroneThread");
 
-        // Temporary demo consumer/producer (Drone stand-in)
-        Thread droneStub = new Thread(() -> {
-            try {
-                while (true) {
-                    DroneCommand cmd = bus.droneCommands.take();
-                    System.out.println("[Drone] got command: " + cmd);
 
-                    bus.droneStatuses.put(new DroneStatus(cmd.droneId(), "EN_ROUTE", cmd.zoneId()));
-                    bus.droneStatuses.put(new DroneStatus(cmd.droneId(), "ARRIVED", cmd.zoneId()));
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }, "DroneStub");
-
-        // Temporary demo consumer (Scheduler status receiver stand-in)
-        Thread statusConsumer = new Thread(() -> {
-            try {
-                while (true) {
-                    DroneStatus st = bus.droneStatuses.take();
-                    System.out.println("[Scheduler] got status: " + st);
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }, "StatusConsumerStub");
-
-        schedulerStub.start();
-        droneStub.start();
-        statusConsumer.start();
-        //fireProducer.start();
         fireThread.start();
+        schedulerThread.start();
+        droneThread.start();
     }
 }

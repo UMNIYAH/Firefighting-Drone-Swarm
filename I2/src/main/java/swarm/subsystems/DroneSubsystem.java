@@ -37,7 +37,7 @@ public class DroneSubsystem implements Runnable{
     @Override
     public void run() {
         // thread to handle drone commands
-        new Thread(this::processMissions, "Drone-" + droneId + "-Processor").start();
+        //new Thread(this::processMissions, "Drone-" + droneId + "-Processor").start();
     }
 
     /**
@@ -49,7 +49,13 @@ public class DroneSubsystem implements Runnable{
                 // 1. IDLE: Wait for work
                 reportStatus(DroneState.IDLE, null);
                 DroneCommand cmd = bus.droneCommands.take();
+
+                // Get the target zone center safely
                 Position target = zoneManager.getZoneCenter(cmd.zoneId());
+                if (target == null) {
+                    System.err.println("[Drone " + droneId + "] ERROR: Zone " + cmd.zoneId() + " not found!");
+                    continue; // skip this mission
+                }
 
                 // 2. EN_ROUTE: Calculate flight time based on distance
                 reportStatus(DroneState.EN_ROUTE, cmd.zoneId());

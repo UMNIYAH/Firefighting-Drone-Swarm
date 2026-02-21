@@ -1,19 +1,35 @@
 package swarm.main;
 
 import swarm.infra.MessageBus;
+import swarm.infra.ZoneManager;
 import swarm.subsystems.FireIncidentSubsystem;
 import swarm.subsystems.Scheduler;
 import swarm.subsystems.DroneSubsystem;
 
 import javax.swing.*;
 import java.awt.*;
+import java.io.IOException;
 
 public class SimulatorGUI {
 
     private final JTextArea logArea = new JTextArea();
     private final MessageBus bus = new MessageBus(50);
+    private final ZoneManager zoneManager;
 
     public SimulatorGUI() {
+        // Initialize ZoneManager safely
+        ZoneManager tempZoneManager = null;
+        try {
+            tempZoneManager = new ZoneManager("sample_zone_file.csv");
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(null,
+                    "Failed to load zone file: " + e.getMessage(),
+                    "Error",
+                    JOptionPane.ERROR_MESSAGE);
+            System.exit(1); // Stop program if zones can't be loaded
+        }
+        zoneManager = tempZoneManager;
+
         JFrame frame = new JFrame("Firefighting Drone Simulator – Iteration 1");
         frame.setSize(700, 500);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -63,7 +79,7 @@ public class SimulatorGUI {
 
         // Drone
         Thread droneThread = new Thread(
-                new DroneSubsystem(bus, 1),
+                new DroneSubsystem(bus, 1, zoneManager),
                 "DroneSubsystem"
         );
 
