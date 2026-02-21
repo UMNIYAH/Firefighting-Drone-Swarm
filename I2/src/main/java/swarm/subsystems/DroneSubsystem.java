@@ -37,7 +37,7 @@ public class DroneSubsystem implements Runnable{
     @Override
     public void run() {
         // thread to handle drone commands
-        //new Thread(this::processMissions, "Drone-" + droneId + "-Processor").start();
+        new Thread(this::processMissions, "Drone-" + droneId + "-Processor").start();
     }
 
     /**
