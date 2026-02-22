@@ -42,12 +42,12 @@ public class SchedulerTest {
         Thread schedulerThread = new Thread(scheduler);
         schedulerThread.start();
 
-        // First fire → drone en route
+        // First fire -> drone en route
         bus.fireEvents.put(new FireEvent(1000L, 1, EventType.FIRE_DETECTED, Severity.HIGH));
         DroneCommand command1 = bus.droneCommands.take();
         assertEquals(1, command1.zoneId());
 
-        // Second fire → should queue
+        // Second fire -> should queue
         bus.fireEvents.put(new FireEvent(2000L, 2, EventType.FIRE_DETECTED, Severity.MODERATE));
         assertEquals(0, bus.droneCommands.size(), "Second fire should wait in scheduler queue");
 

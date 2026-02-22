@@ -75,9 +75,9 @@ public class DroneSubsystem implements Runnable{
                 Thread.sleep(DroneConfig.travelTimeMillis(currentPosition.distanceTo(DroneConfig.BASE_POSITION)));
 
                 // 5. REFILLING
-                reportStatus(DroneState.REFILLING, null);
                 currentPosition = DroneConfig.BASE_POSITION;
                 currentAgent = DroneConfig.AGENT_CAPACITY_LITERS; // Refilled
+                reportStatus(DroneState.REFILLING, null);
                 Thread.sleep(1000); // Small delay simulating refill
             }
         } catch (InterruptedException e) {
