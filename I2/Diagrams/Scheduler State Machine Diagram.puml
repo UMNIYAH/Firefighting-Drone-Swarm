@@ -1,0 +1,28 @@
+@startuml
+title Scheduler State Machine
+
+[*] --> WAITING
+
+state WAITING {
+}
+WAITING : droneBusy = false OR missionQueue empty
+
+WAITING --> DISPATCHING : (missionQueue not empty) AND (droneBusy == false)
+
+state DISPATCHING {
+}
+DISPATCHING : nextMission = missionQueue.poll()
+DISPATCHING : droneBusy = true
+DISPATCHING : put(DroneCommand)
+DISPATCHING --> BUSY : command sent
+
+state BUSY {
+}
+BUSY : droneBusy = true
+
+BUSY --> BUSY : receive FireEvent / enqueue missionQueue
+BUSY --> WAITING : receive DroneStatus(IDLE)\n(drone available)
+
+WAITING --> WAITING : receive FireEvent / enqueue missionQueue
+
+@enduml
