@@ -9,6 +9,14 @@ public final class DroneConfig {
 
     private DroneConfig() {}
 
+    private static boolean TEST_MODE = false;
+    public static void enableTestMode() {
+        TEST_MODE = true;
+    }
+    public static void disableTestMode() {
+        TEST_MODE = false;
+    }
+
     // From Iteration 0:
     // Cruise speed: 8 m/s (conservative)
     // Takeoff acceleration: 1.5 m/s^2
@@ -39,6 +47,9 @@ public final class DroneConfig {
      * Travel time using accel–cruise–decel profile.
      */
     public static long travelTimeMillis(double distanceMeters) {
+
+        if(TEST_MODE) return 5;
+
         double accelDecelDist = TAKEOFF_DIST_M + LANDING_DIST_M;
         double totalSeconds;
 
@@ -57,11 +68,17 @@ public final class DroneConfig {
      * Drop time based on required liters and 7.2 L/min rate.
      */
     public static long dropTimeMillis(int litersRequired) {
+
+        if(TEST_MODE) return 5;
+
         double seconds = litersRequired / DROP_RATE_LPS;
         return (long) (seconds * 1000);
     }
 
-    public static long doorOpenCloseMillis() {
+    public static long doorOpenCloseMillis()
+    {
+        if(TEST_MODE) return 2;
+
         return (long) ((DOOR_OPEN_TIME_S + DOOR_CLOSE_TIME_S) * 1000);
     }
 }

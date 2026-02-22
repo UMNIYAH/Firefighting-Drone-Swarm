@@ -49,7 +49,13 @@ public class DroneSubsystem implements Runnable{
                 // 1. IDLE: Wait for work
                 reportStatus(DroneState.IDLE, null);
                 DroneCommand cmd = bus.droneCommands.take();
+
+                // Get the target zone center safely
                 Position target = zoneManager.getZoneCenter(cmd.zoneId());
+                if (target == null) {
+                    System.err.println("[Drone " + droneId + "] ERROR: Zone " + cmd.zoneId() + " not found!");
+                    continue; // skip this mission
+                }
 
                 // 2. EN_ROUTE: Calculate flight time based on distance
                 reportStatus(DroneState.EN_ROUTE, cmd.zoneId());
@@ -69,9 +75,9 @@ public class DroneSubsystem implements Runnable{
                 Thread.sleep(DroneConfig.travelTimeMillis(currentPosition.distanceTo(DroneConfig.BASE_POSITION)));
 
                 // 5. REFILLING
-                reportStatus(DroneState.REFILLING, null);
                 currentPosition = DroneConfig.BASE_POSITION;
                 currentAgent = DroneConfig.AGENT_CAPACITY_LITERS; // Refilled
+                reportStatus(DroneState.REFILLING, null);
                 Thread.sleep(1000); // Small delay simulating refill
             }
         } catch (InterruptedException e) {

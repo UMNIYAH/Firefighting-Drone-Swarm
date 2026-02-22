@@ -14,7 +14,7 @@ import java.util.Map;
  *
  * Expected format:
  * Zone ID, Zone Start, Zone End
- * n, (x1, y1), (x2, y2)
+ * n, (x1; y1), (x2; y2)
  */
 public class ZoneManager {
 
@@ -28,7 +28,7 @@ public class ZoneManager {
         try (BufferedReader br = new BufferedReader(new FileReader(path))) {
             String line;
             while ((line = br.readLine()) != null) {
-                if (line.trim().isEmpty() || line.toLowerCase().startsWith("zone")) {
+                if (line.trim().isEmpty() || line.trim().toLowerCase().startsWith("zone")) {
                     continue;
                 }
                 String[] parts = line.split(",");
@@ -45,7 +45,7 @@ public class ZoneManager {
     private Position parsePosition(String token) {
         // token like "(700,600)" or "(700, 600)"
         String cleaned = token.replace("(", "").replace(")", "");
-        String[] xy = cleaned.split("\\s*,\\s*");
+        String[] xy = cleaned.split("\\s*;\\s*");
         double x = Double.parseDouble(xy[0]);
         double y = Double.parseDouble(xy[1]);
         return new Position(x, y);
