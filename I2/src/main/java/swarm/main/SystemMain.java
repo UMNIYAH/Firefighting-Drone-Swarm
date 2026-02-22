@@ -34,8 +34,8 @@ public class SystemMain {
                     DroneCommand cmd = bus.droneCommands.take();
                     System.out.println("[Drone] got command: " + cmd);
 
-                    bus.droneStatuses.put(new DroneStatus(cmd.droneId(), "EN_ROUTE", cmd.zoneId()));
-                    bus.droneStatuses.put(new DroneStatus(cmd.droneId(), "ARRIVED", cmd.zoneId()));
+                    bus.droneStatuses.put(new DroneStatus(cmd.droneId(), DroneState.EN_ROUTE, cmd.zoneId(), 30));
+                    bus.droneStatuses.put(new DroneStatus(cmd.droneId(), DroneState.ARRIVED, cmd.zoneId(), 30));
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
