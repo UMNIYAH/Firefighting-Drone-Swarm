@@ -1,11 +1,13 @@
 package swarm.subsystems;
 
 import swarm.infra.DroneConfig;
-import swarm.infra.MessageBus;
+import swarm.infra.UDPHelper;
 import swarm.infra.ZoneManager;
+import swarm.main.SimulatorGUI;
 import swarm.messages.DroneCommand;
 import swarm.messages.DroneState;
 import swarm.messages.DroneStatus;
+import swarm.messages.Severity;
 import swarm.model.Position;
 
 
@@ -20,14 +22,14 @@ import swarm.model.Position;
  * logic is intentionally minimal for Iteration 1.
  */
 public class DroneSubsystem implements Runnable{
-    private final MessageBus bus;
+    private final UDPHelper udp;
     private final int droneId;
     private final ZoneManager zoneManager;
     private int currentAgent;
     private Position currentPosition;
 
-    public DroneSubsystem(MessageBus bus, int droneId, ZoneManager zoneManager) {
-        this.bus = bus;
+    public DroneSubsystem(UDPHelper udp, int droneId, ZoneManager zoneManager) {
+        this.udp = udp;
         this.droneId = droneId;
         this.zoneManager = zoneManager;
         this.currentAgent = DroneConfig.AGENT_CAPACITY_LITERS;
@@ -36,6 +38,7 @@ public class DroneSubsystem implements Runnable{
 
     @Override
     public void run() {
+        System.out.println("[Drone] " + droneId + "] Listening on port 6000...");
         // thread to handle drone commands
         new Thread(this::processMissions, "Drone-" + droneId + "-Processor").start();
     }
@@ -46,46 +49,74 @@ public class DroneSubsystem implements Runnable{
     private void processMissions() {
         try {
             while (true) {
-                // 1. IDLE: Wait for work
-                reportStatus(DroneState.IDLE, null);
-                DroneCommand cmd = bus.droneCommands.take();
+                // Recieve command from Scheduler
+                String message = udp.receive();
+                String[] parts = message.split(":");
 
-                // Get the target zone center safely
-                Position target = zoneManager.getZoneCenter(cmd.zoneId());
-                if (target == null) {
-                    System.err.println("[Drone " + droneId + "] ERROR: Zone " + cmd.zoneId() + " not found!");
-                    continue; // skip this mission
+                if (parts[0].equals("CMD")) {
+                    int zoneId = Integer.parseInt(parts[1]);
+                    Severity severity = Severity.valueOf(parts[2]);
+
+                    Position target = zoneManager.getZoneCenter(zoneId);
+                    if (target == null) {
+                        System.err.println("[DRONE FAILURE] Zone " + zoneId + " not found.");
+                        continue;
+                    }
+
+
+                    // EN_ROUTE: Calculate flight time based on distance
+                    reportStatus(DroneState.EN_ROUTE, zoneId);
+                    long flightTime = DroneConfig.travelTimeMillis(currentPosition.distanceTo(target));
+                    Thread.sleep(flightTime / 10);
+                    currentPosition = target;
+
+                    // DROPPING_AGENT: Time = door cycle + flow rate
+                    reportStatus(DroneState.DROPPING_AGENT, zoneId);
+                    long dropTime = DroneConfig.dropTimeMillis(severity.litersRequired())
+                            + DroneConfig.doorOpenCloseMillis();
+                    Thread.sleep(dropTime / 10);
+                    currentAgent -= severity.litersRequired();
+
+                    if (SimulatorGUI.instance != null) {
+                        SimulatorGUI.instance.clearZone(zoneId);
+                    }
+
+                    // RETURNING: Back to base to refill
+                    reportStatus(DroneState.RETURNING, zoneId);
+                    long returnTime = DroneConfig.travelTimeMillis(currentPosition.distanceTo(DroneConfig.BASE_POSITION));
+                    Thread.sleep(returnTime / 10);
+
+                    // REFILLING
+                    currentPosition = DroneConfig.BASE_POSITION;
+                    currentAgent = DroneConfig.AGENT_CAPACITY_LITERS; // Refilled
+                    reportStatus(DroneState.REFILLING, zoneId);
+                    Thread.sleep(200); // Small delay simulating refill
+
+                    // IDLE
+                    reportStatus(DroneState.IDLE, null);
                 }
-
-                // 2. EN_ROUTE: Calculate flight time based on distance
-                reportStatus(DroneState.EN_ROUTE, cmd.zoneId());
-                long flightTime = DroneConfig.travelTimeMillis(currentPosition.distanceTo(target));
-                Thread.sleep(flightTime);
-                currentPosition = target;
-
-                // 3. DROPPING_AGENT: Time = door cycle + flow rate
-                reportStatus(DroneState.DROPPING_AGENT, cmd.zoneId());
-                long dropTime = DroneConfig.dropTimeMillis(cmd.severity().litersRequired())
-                        + DroneConfig.doorOpenCloseMillis();
-                Thread.sleep(dropTime);
-                currentAgent -= cmd.severity().litersRequired();
-
-                // 4. RETURNING: Back to base to refill (Iteration 2 logic)
-                reportStatus(DroneState.RETURNING, null);
-                Thread.sleep(DroneConfig.travelTimeMillis(currentPosition.distanceTo(DroneConfig.BASE_POSITION)));
-
-                // 5. REFILLING
-                currentPosition = DroneConfig.BASE_POSITION;
-                currentAgent = DroneConfig.AGENT_CAPACITY_LITERS; // Refilled
-                reportStatus(DroneState.REFILLING, null);
-                Thread.sleep(1000); // Small delay simulating refill
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        }catch (Exception e) {
+            System.err.println("[DRONE] Network error: " + e.getMessage());
         }
     }
 
-    private void reportStatus(DroneState state, Integer zoneId) throws InterruptedException{
-        bus.droneStatuses.put(new DroneStatus(droneId, state, zoneId, currentAgent));
+    private void reportStatus(DroneState state, Integer zoneId) {
+        try{
+            // Serialize state into string format
+            // If zoneId is null, use 0 as placeholder
+            String zoneIdString = (zoneId != null) ? String.valueOf(zoneId) : "0";
+            String statusMessage = "STATUS:" + droneId + ":" + state.name() + ":" + zoneIdString;
+
+            // Send back to Scheduler on Port 5000
+            udp.send(statusMessage, 5000);
+
+            if (SimulatorGUI.instance != null) {
+                SimulatorGUI.instance.log("[Drone " + droneId + "] is now " + state +
+                        (zoneId != null ? " (Zone " + zoneId + ")" : ""));
+            }
+        } catch (Exception e){
+            System.err.println("[Drone] Failed to send status update.");
+        }
     }
 }

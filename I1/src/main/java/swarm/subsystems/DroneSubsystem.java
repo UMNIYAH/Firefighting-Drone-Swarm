@@ -4,6 +4,8 @@ import swarm.infra.MessageBus;
 import swarm.messages.DroneCommand;
 import swarm.messages.DroneStatus;
 
+import javax.swing.text.Position;
+
 
 /**
  * Drone subsystem.
@@ -17,41 +19,65 @@ import swarm.messages.DroneStatus;
  */
 public class DroneSubsystem implements Runnable{
     private final MessageBus bus;
-    private final int droneID;
+    private final int droneId;
+    private final ZoneManager zoneManager;
+    private int currentAgent;
+    private Position currentPosition;
 
-    public DroneSubsystem(MessageBus bus, int droneId) {
+    public DroneSubsystem(MessageBus bus, int droneId, ZoneManager zoneManager) {
         this.bus = bus;
-        this.droneID = droneId;
+        this.droneId = droneId;
+        this.zoneManager = zoneManager;
+        this.currentAgent = DroneConfig.AGENT_CAPACITY_LITERS;
+        this.currentPosition = DronConfig.BASE_POSITION;
     }
 
     @Override
     public void run() {
         // thread to handle drone commands
-        Thread commandHandler = new Thread(this::handleCommand,"Drone-"+droneID+"-CommandHandler");
-
-        commandHandler.start();
+        new Thread(this::processMissions, "Drone-" + droneId + "-Processor").start();
     }
 
     /**
      * Checks for drone commands and dispatches a drone
      */
-    private void handleCommand() {
+    private void processMissions() {
         try {
             while (true) {
-                DroneCommand command = bus.droneCommands.take();
-                System.out.println("[Drone " + droneID+ "] Received command: " + command);
+                // 1. IDLE: Wait for work
+                reportStatus(DroneState.IDLE, null);
+                DroneCommand cmd = bus.droneCommands.take();
+                Position target = zoneManager.getZoneCenter(cmd.zoneId());
 
-                // Simulate drone en route
-                bus.droneStatuses.put(new DroneStatus(droneID, "EN_ROUTE", command.zoneId()));
+                // 2. EN_ROUTE: Calculate flight time based on distance
+                reportStatus(DroneState.EN_ROUTE, cmd.zoneId());
+                long flightTime = DroneConfig.travelTimeMillis(currentPos.distanceTo(target));
+                Thread.sleep(flightTime);
+                currentPos = target;
 
-                //Delay to simulate travel time
-                Thread.sleep(500);
+                // 3. DROPPING_AGENT: Time = door cycle + flow rate
+                reportStatus(DroneState.DROPPING_AGENT, cmd.zoneId());
+                long dropTime = DroneConfig.dropTimeMillis(cmd.severity().litersRequired())
+                        + DroneConfig.doorOpenCloseMillis();
+                Thread.sleep(dropTime);
+                currentAgent -= cmd.severity().litersRequired();
 
-                // Simulate drone arrived and extinguished fire
-                bus.droneStatuses.put(new DroneStatus(droneID, "ARRIVED", command.zoneId()));
+                // 4. RETURNING: Back to base to refill (Iteration 2 logic)
+                reportStatus(DroneState.RETURNING, null);
+                Thread.sleep(DroneConfig.travelTimeMillis(currentPos.distanceTo(DroneConfig.BASE_POSITION)));
+
+                // 5. REFILLING
+                reportStatus(DroneState.REFILLING, null);
+                currentPos = DroneConfig.BASE_POSITION;
+                currentAgent = DroneConfig.AGENT_CAPACITY_LITERS; // Refilled
+                Thread.sleep(1000); // Small delay to simulate refill/landing
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
+    }
+
+    private void reportStatus(DroneState state, Integer zoneId) throws InterruptedException{
+        bus.droneStatuses.put(new DroneStatus(droneId, state, zoneId, currentAgent));
     }
 }

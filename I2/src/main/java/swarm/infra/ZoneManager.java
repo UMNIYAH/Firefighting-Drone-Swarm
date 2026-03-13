@@ -32,12 +32,14 @@ public class ZoneManager {
                     continue;
                 }
                 String[] parts = line.split(",");
-                if (parts.length != 3) continue;
-
-                int id = Integer.parseInt(parts[0].trim());
-                Position start = parsePosition(parts[1].trim());
-                Position end = parsePosition(parts[2].trim());
-                zones.put(id, new Zone(id, start, end));
+                if (parts.length == 3) {
+                    int id = Integer.parseInt(parts[0].trim());
+                    Position start = parsePosition(parts[1].trim());
+                    Position end = parsePosition(parts[2].trim());
+                    zones.put(id, new Zone(id, start, end));
+                } else {
+                    System.err.println("[ZoneManager] Skipping line: " + line);
+                }
             }
         }
     }

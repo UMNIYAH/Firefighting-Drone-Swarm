@@ -1,6 +1,7 @@
 package swarm.subsystems;
 
-import swarm.infra.MessageBus;
+import swarm.infra.UDPHelper;
+import swarm.main.SimulatorGUI;
 import swarm.messages.DroneCommand;
 import swarm.messages.DroneState;
 import swarm.messages.DroneStatus;
@@ -23,70 +24,71 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class Scheduler implements Runnable {
 
-    private final MessageBus bus;
-    private final Queue<FireEvent> missionQueue = new LinkedList<>();
-    private boolean droneBusy = false;
-    private final int droneId = 1;
+    private final UDPHelper udp;
 
-    public Scheduler(MessageBus bus) {
-        this.bus = bus;
+    public Scheduler(UDPHelper udp) {
+        this.udp = udp;
     }
 
     @Override
     public void run() {
-        // Thread handling fire events
-        new Thread(this::handleFireEvents, "Scheduler-FireHandler").start();
-        // Thread handling drone status updates
-        new Thread(this::handleDroneStatuses, "Scheduler-DroneStatusHandler").start();
+        System.out.println("[Scheduler] Listening on port 5000...");
+
+        try{
+            // listening for incoming messages
+            while(true){
+                String message = udp.receive();
+                handleMessage(message);
+            }
+        } catch (Exception e){
+            System.err.println("[Scheduler] Network error: " + e.getMessage());
+        }
     }
 
     /**
      * Consumes FireEvent messages and dispatches a drone.
      */
-    private void handleFireEvents() {
-        try {
-            while (true) {
-                FireEvent event = bus.fireEvents.take();
-                System.out.println("[Scheduler] Received fire event: " + event);
+    private void handleMessage(String message) {
+        // Split string
+        String[] parts = message.split(":");
+        String command = parts[0];
 
-                synchronized (missionQueue) {
-                    missionQueue.add(event);
-                }
-                dispatchDrone();
+        // Handle new fire event
+        if (command.equals("FIRE")){
+            int zoneId = Integer.parseInt(parts[1]);
+            String severity =  parts[2];
+            String type = parts[3];
+
+            System.out.println("[Scheduler] Received fire event: Zone " + zoneId);
+
+            try {
+                String cmdMessage = "CMD:" + zoneId + ":" + severity;
+                udp.send(cmdMessage, 6000);
+                System.out.println("[Scheduler] Dispatched drone to Zone " + zoneId);
+            } catch (Exception e){
+                System.err.println("[Scheduler] Failed to dispatch drone.");
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
         }
-    }
 
-    /**
-     * Sends a DroneCommand to the DroneSubsystem.
-     */
-    private void dispatchDrone() throws InterruptedException {
-        if (!droneBusy && !missionQueue.isEmpty()) {
-            FireEvent nextMission = missionQueue.poll();
-            droneBusy = true;
-            bus.droneCommands.put(new DroneCommand(droneId, nextMission.zoneId(), nextMission.severity()));
-            System.out.println("[Scheduler] Dispatched drone to Zone " + nextMission.zoneId());
-        }
-    }
+        // Handle status update from Drone
+        else if (command.equals("STATUS")){
+            int droneId = Integer.parseInt(parts[1]);
+            DroneState state = DroneState.valueOf(parts[2]);
+            int zoneId = Integer.parseInt(parts[3]);
 
-    /**
-     * Consumes DroneStatus messages from the DroneSubsystem.
-     */
-    private void handleDroneStatuses() {
-        try {
-            while (true) {
-                DroneStatus status = bus.droneStatuses.take();
-                System.out.println("[Scheduler] Received drone status: " + status);
+            System.out.println("[Drone " + droneId + "] is now "  + state + " (Zone " + zoneId + ")");
 
-                if (status.state() == DroneState.IDLE){
-                    synchronized (missionQueue) { droneBusy = false;}
-                    dispatchDrone();
+            // Update GUI
+            if (SimulatorGUI.instance != null){
+                SimulatorGUI.instance.updateDroneState(state);
+
+                // if drone is done, lower active fire count
+                if (state == DroneState.IDLE){
+                    SimulatorGUI.instance.decrementFire();
                 }
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        } else {
+            System.out.println("[Scheduler] Unknown command: " + command);
         }
     }
 }

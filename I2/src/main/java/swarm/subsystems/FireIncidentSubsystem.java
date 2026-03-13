@@ -1,6 +1,7 @@
 package swarm.subsystems;
 
-import swarm.infra.MessageBus;
+import swarm.infra.UDPHelper;
+import swarm.main.SimulatorGUI;
 import swarm.messages.DroneStatus;
 import swarm.messages.EventType;
 import swarm.messages.FireEvent;
@@ -24,25 +25,18 @@ import java.io.IOException;
  * Iteration 1:
  */
 public class FireIncidentSubsystem implements Runnable{
-    private MessageBus bus;
-    private String inputFileName;
+    private final UDPHelper udp;
+    private final String inputFileName;
 
-    public FireIncidentSubsystem(MessageBus bus, String inputFileName) {
-        this.bus = bus;
+    public FireIncidentSubsystem(UDPHelper udp, String inputFileName) {
+        this.udp = udp;
         this.inputFileName = inputFileName;
     }
 
     @Override
     public void run() {
-
-        // Event-reader running
-        Thread readerThread = new Thread(this::runEventReader, "FireEventReader");
-
-        // Status Listener
-        Thread statusListenerThread = new Thread(this::runStatusListener, "DroneStatusListener");
-
-        readerThread.start();
-        statusListenerThread.start();
+        // Event reader
+        new Thread(this::runEventReader, "FireEventReader").start();
     }
 
     // Reads file and pushes events to the Scheduler
@@ -50,31 +44,16 @@ public class FireIncidentSubsystem implements Runnable{
         try{
             readIncidents(inputFileName);
             System.out.println("[FireIncident] Completed reading events from file.");
-        } catch (IOException | InterruptedException e){
+        } catch (Exception e){
             System.err.println("[FireIncident] Reader encountered an error.");
+            e.printStackTrace();
         }
     }
-
-    // Loop: Waits for and logs drone status updates.
-    private void runStatusListener(){
-        try{
-            while(!Thread.currentThread().isInterrupted()){
-                // Event driven: blocks until a message exists
-                DroneStatus status = bus.droneStatuses.take();
-                // Logging to verify communication
-                System.out.println("[FireIncident] Drone Status: " + status);
-            }
-        } catch (InterruptedException e){
-            Thread.currentThread().interrupt();
-        }
-    }
-
 
     // Reads fire events from a csv file and passes them to MessageBus
     private void readIncidents(String inputFileName) throws IOException, InterruptedException {
         try (BufferedReader br = new BufferedReader(new FileReader(inputFileName))) {
             String line;
-
             while ((line = br.readLine()) != null) {
                 // Skip empty lines and CSV Header
                 if (line.trim().isEmpty() || line.toLowerCase().startsWith("time")) continue;
@@ -98,9 +77,17 @@ public class FireIncidentSubsystem implements Runnable{
                     EventType type = EventType.valueOf(parameter[2].trim());
                     Severity severity = Severity.valueOf(parameter[3].trim().toUpperCase());
 
-                    // Trim whitespace, create FireIncident object and send to MessageBus
-                    FireEvent incident = new FireEvent(timestamp, zoneId, type, severity);
-                    bus.fireEvents.put(incident);
+                    // Serialization and UDP
+                    String message = "FIRE:" + zoneId + ":" + severity.name() + type.name();
+                    udp.send(message, 5000);
+
+                    // Notify GUI
+                    if (SimulatorGUI.instance != null) {
+                        SimulatorGUI.instance.incrementFire();
+                        SimulatorGUI.instance.setZoneOnFire(zoneId);
+                        SimulatorGUI.instance.log("NEW INCIDENT: Zone " + zoneId + " reported.");
+                    }
+                    Thread.sleep(1000);
 
                 } catch (Exception e) {
                     System.err.println("Error Parsing Line, skipping: " + line);
