@@ -166,19 +166,15 @@ public class SimulatorGUI {
      * Starts all subsystems in background threads.
      */
     private void startSimulation() {
-        log("Starting simulation...");
+        log("Starting Scheduler UDP Network on Port 5000");
         try{
             // UDP helpers for each subsystem
-            UDPHelper fireUdp = new UDPHelper();
             UDPHelper schedulerUdp = new UDPHelper(5000);
-            UDPHelper droneUdp = new UDPHelper(6000);
 
-            new Thread(new FireIncidentSubsystem(fireUdp, "Sample_event_file.csv"), " FireIncidentSubsystem").start();
             new Thread(new Scheduler(schedulerUdp), "Scheduler").start();
-            new Thread(new DroneSubsystem(droneUdp, 1, zoneManager), "DroneSubsystem").start();
 
         } catch(SocketException e){
-            log("ERROR: Could not bind UDP ports.");
+            log("ERROR: Could not bind UDP port 5000");
             e.printStackTrace();
         }
     }

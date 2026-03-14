@@ -57,9 +57,15 @@ public class Scheduler implements Runnable {
         if (command.equals("FIRE")){
             int zoneId = Integer.parseInt(parts[1]);
             String severity =  parts[2];
-            String type = parts[3];
 
             System.out.println("[Scheduler] Received fire event: Zone " + zoneId);
+
+            // Scheduler updates GUI
+            if (SimulatorGUI.instance != null) {
+                SimulatorGUI.instance.incrementFire();
+                SimulatorGUI.instance.setZoneOnFire(zoneId);
+                SimulatorGUI.instance.log("NEW INCIDENT: Zone " + zoneId);
+            }
 
             try {
                 String cmdMessage = "CMD:" + zoneId + ":" + severity;
@@ -80,15 +86,21 @@ public class Scheduler implements Runnable {
 
             // Update GUI
             if (SimulatorGUI.instance != null){
+                String zoneText = (zoneId != 0) ? " (Zone " + zoneId + ")" : "";
+                SimulatorGUI.instance.log("[Drone " + droneId + "] is now " + state + zoneText);
+
                 SimulatorGUI.instance.updateDroneState(state);
+
+                // Clear fire when dropping agent
+                if (state == DroneState.DROPPING_AGENT){
+                    SimulatorGUI.instance.clearZone(zoneId);
+                }
 
                 // if drone is done, lower active fire count
                 if (state == DroneState.IDLE){
                     SimulatorGUI.instance.decrementFire();
                 }
             }
-        } else {
-            System.out.println("[Scheduler] Unknown command: " + command);
         }
     }
 }

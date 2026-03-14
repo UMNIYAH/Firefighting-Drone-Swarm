@@ -78,21 +78,29 @@ public class FireIncidentSubsystem implements Runnable{
                     Severity severity = Severity.valueOf(parameter[3].trim().toUpperCase());
 
                     // Serialization and UDP
-                    String message = "FIRE:" + zoneId + ":" + severity.name() + type.name();
+                    String message = "FIRE:" + zoneId + ":" + severity.name() + ":" + type.name();
                     udp.send(message, 5000);
 
-                    // Notify GUI
-                    if (SimulatorGUI.instance != null) {
-                        SimulatorGUI.instance.incrementFire();
-                        SimulatorGUI.instance.setZoneOnFire(zoneId);
-                        SimulatorGUI.instance.log("NEW INCIDENT: Zone " + zoneId + " reported.");
-                    }
                     Thread.sleep(1000);
 
                 } catch (Exception e) {
                     System.err.println("Error Parsing Line, skipping: " + line);
                 }
             }
+        }
+    }
+    public static void main(String[] args){
+        System.out.println("Starting Fire subystem");
+        try{
+            // connect to network
+            swarm.infra.UDPHelper udp = new swarm.infra.UDPHelper();
+
+            // Start subsystem
+            FireIncidentSubsystem fire = new FireIncidentSubsystem(udp, "Sample_event_file.csv");
+            fire.run();
+        } catch (Exception e){
+            System.err.println("Failed to start Fire subsystem");
+            e.printStackTrace();
         }
     }
 }

@@ -47,9 +47,9 @@ public class DroneSubsystem implements Runnable{
      * Checks for drone commands and dispatches a drone
      */
     private void processMissions() {
-        try {
-            while (true) {
-                // Recieve command from Scheduler
+        while (true) {
+            try {
+                // Receive command from Scheduler
                 String message = udp.receive();
                 String[] parts = message.split(":");
 
@@ -63,7 +63,6 @@ public class DroneSubsystem implements Runnable{
                         continue;
                     }
 
-
                     // EN_ROUTE: Calculate flight time based on distance
                     reportStatus(DroneState.EN_ROUTE, zoneId);
                     long flightTime = DroneConfig.travelTimeMillis(currentPosition.distanceTo(target));
@@ -76,10 +75,6 @@ public class DroneSubsystem implements Runnable{
                             + DroneConfig.doorOpenCloseMillis();
                     Thread.sleep(dropTime / 10);
                     currentAgent -= severity.litersRequired();
-
-                    if (SimulatorGUI.instance != null) {
-                        SimulatorGUI.instance.clearZone(zoneId);
-                    }
 
                     // RETURNING: Back to base to refill
                     reportStatus(DroneState.RETURNING, zoneId);
@@ -95,9 +90,9 @@ public class DroneSubsystem implements Runnable{
                     // IDLE
                     reportStatus(DroneState.IDLE, null);
                 }
+            } catch (Exception e) {
+                System.err.println("[DRONE] Network error or bad packet: " + e.getMessage());
             }
-        }catch (Exception e) {
-            System.err.println("[DRONE] Network error: " + e.getMessage());
         }
     }
 
@@ -117,6 +112,22 @@ public class DroneSubsystem implements Runnable{
             }
         } catch (Exception e){
             System.err.println("[Drone] Failed to send status update.");
+        }
+    }
+    public static void main(String[] args){
+        System.out.println("Starting Drone subsystem");
+        try{
+            swarm.infra.ZoneManager zm = new swarm.infra.ZoneManager("sample_zone_file.csv");
+
+            // connect to network
+            swarm.infra.UDPHelper udp = new swarm.infra.UDPHelper(6000);
+
+            // Start subsystem
+            DroneSubsystem drone = new DroneSubsystem(udp, 1, zm);
+            drone.run();
+        } catch (Exception e){
+            System.err.println("Failed to start Drone subsystem");
+            e.printStackTrace();
         }
     }
 }
