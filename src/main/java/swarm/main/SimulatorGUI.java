@@ -137,8 +137,8 @@ public class SimulatorGUI {
         }
     }
 
-    public void updateDroneState(DroneState state) {
-        SwingUtilities.invokeLater(() -> droneStateLabel.setText("Drone State: " + state));
+    public void updateDroneState(int droneId, DroneState state) {
+        SwingUtilities.invokeLater(() -> droneStateLabel.setText("Drone " + droneId + ": " + state));
     }
 
     public void setZoneOnFire(int zoneId){
@@ -166,17 +166,7 @@ public class SimulatorGUI {
      * Starts all subsystems in background threads.
      */
     private void startSimulation() {
-        log("Starting Scheduler UDP Network on Port 5000");
-        try{
-            // UDP helpers for each subsystem
-            UDPHelper schedulerUdp = new UDPHelper(5000);
-
-            new Thread(new Scheduler(schedulerUdp), "Scheduler").start();
-
-        } catch(SocketException e){
-            log("ERROR: Could not bind UDP port 5000");
-            e.printStackTrace();
-        }
+        log("GUI started. Waiting for subsystem updates...");
     }
 
     public static void main(String[] args) {

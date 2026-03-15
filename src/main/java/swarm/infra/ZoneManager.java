@@ -8,17 +8,16 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
-/**
- * Loads and manages zone definitions from CSV.
- *
- * Expected format:
- * Zone ID, Zone Start, Zone End
- * n, (x1; y1), (x2; y2)
- */
 public class ZoneManager {
 
     private final Map<Integer, Zone> zones = new HashMap<>();
+
+    // Matches: ID, (x1, y1), (x2, y2)  with flexible spacing
+    private static final Pattern ZONE_PATTERN =
+            Pattern.compile("\\s*(\\d+)\\s*,\\s*\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*\\)\\s*,\\s*\\(\\s*([\\d.]+)\\s*,\\s*([\\d.]+)\\s*\\)");
 
     public ZoneManager(String zoneFilePath) throws IOException {
         loadZones(zoneFilePath);
@@ -31,26 +30,18 @@ public class ZoneManager {
                 if (line.trim().isEmpty() || line.trim().toLowerCase().startsWith("zone")) {
                     continue;
                 }
-                String[] parts = line.split(",");
-                if (parts.length == 3) {
-                    int id = Integer.parseInt(parts[0].trim());
-                    Position start = parsePosition(parts[1].trim());
-                    Position end = parsePosition(parts[2].trim());
+                Matcher m = ZONE_PATTERN.matcher(line);
+                if (m.matches()) {
+                    int id = Integer.parseInt(m.group(1));
+                    Position start = new Position(Double.parseDouble(m.group(2)), Double.parseDouble(m.group(3)));
+                    Position end = new Position(Double.parseDouble(m.group(4)), Double.parseDouble(m.group(5)));
                     zones.put(id, new Zone(id, start, end));
+                    System.out.println("[ZoneManager] Loaded Zone " + id);
                 } else {
                     System.err.println("[ZoneManager] Skipping line: " + line);
                 }
             }
         }
-    }
-
-    private Position parsePosition(String token) {
-        // token like "(700,600)" or "(700, 600)"
-        String cleaned = token.replace("(", "").replace(")", "");
-        String[] xy = cleaned.split("\\s*;\\s*");
-        double x = Double.parseDouble(xy[0]);
-        double y = Double.parseDouble(xy[1]);
-        return new Position(x, y);
     }
 
     public Zone getZone(int id) {
