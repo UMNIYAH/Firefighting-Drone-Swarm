@@ -5,6 +5,8 @@ import swarm.messages.DroneCommand;
 import swarm.messages.DroneStatus;
 import swarm.messages.FireEvent;
 
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -21,8 +23,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class Scheduler implements Runnable {
 
     private final MessageBus bus;
-    private final int assignedDroneId = 1; // Single-drone assumption
-    private final AtomicBoolean droneBusy = new AtomicBoolean(false);
+    private final Queue<FireEvent> missionQueue = new LinkedList<>();
+    private boolean droneBusy = false;
+    private final int droneId = 1;
 
     public Scheduler(MessageBus bus) {
         this.bus = bus;
@@ -30,14 +33,10 @@ public class Scheduler implements Runnable {
 
     @Override
     public void run() {
-        // Thread to consume fire events
-        Thread fireEventHandler = new Thread(this::handleFireEvents, "Scheduler-FireHandler");
-
-        // Thread to consume drone status updates
-        Thread droneStatusHandler = new Thread(this::handleDroneStatuses, "Scheduler-StatusHandler");
-
-        fireEventHandler.start();
-        droneStatusHandler.start();
+        // Thread handling fire events
+        new Thread(this::handleFireEvents, "Scheduler-FireHandler").start();
+        // Thread handling drone status updates
+        new Thread(this::handleDroneStatuses, "Scheduler-DroneStatusHandler").start();
     }
 
     /**
@@ -49,11 +48,8 @@ public class Scheduler implements Runnable {
                 FireEvent event = bus.fireEvents.take();
                 System.out.println("[Scheduler] Received fire event: " + event);
 
-                // Iteration 1: single drone, no queueing
-                if (!droneBusy.get()) {
-                    dispatchDrone(event);
-                } else {
-                    System.out.println("[Scheduler] Drone busy, event ignored (Iteration 1 simplification)");
+                synchronized (missionQueue) {
+                    missionQueue.add(event);
                 }
             }
         } catch (InterruptedException e) {
@@ -65,17 +61,12 @@ public class Scheduler implements Runnable {
      * Sends a DroneCommand to the DroneSubsystem.
      */
     private void dispatchDrone(FireEvent event) throws InterruptedException {
-        DroneCommand command = new DroneCommand(
-                assignedDroneId,
-                event.zoneId(),
-                event.severity()
-        );
-
-        droneBusy.set(true);
-        bus.droneCommands.put(command);
-
-        System.out.println("[Scheduler] Dispatched drone " + assignedDroneId +
-                " to zone " + event.zoneId());
+        if (!droneBusy && !missionQueue.isEmpty()) {
+            FireEvent nextMission = missionQueue.poll();
+            droneBusy = true;
+            bus.droneCommands.put(new DroneCommand(droneId, nextMission.zoneId(), nextMission.severity()));
+            System.out.println("[Scheduler] Dispatched drone to Zone " + nextMission.zoneId());
+        }
     }
 
     /**
@@ -87,10 +78,9 @@ public class Scheduler implements Runnable {
                 DroneStatus status = bus.droneStatuses.take();
                 System.out.println("[Scheduler] Received drone status: " + status);
 
-                // Iteration 1: consider drone free once it reports ARRIVED
-                if ("ARRIVED".equalsIgnoreCase(status.state())) {
-                    droneBusy.set(false);
-                    System.out.println("[Scheduler] Drone " + status.droneId() + " is now available");
+                if (status.state() == DroneState.IDLE){
+                    synchronized (this) { droneBusy = false;}
+                    checkAndDispatch();
                 }
             }
         } catch (InterruptedException e) {
