@@ -1,0 +1,55 @@
+@startuml
+title Firefighting Drone Swarm - Iteration 2 - Sequence Diagram (Threads + Message Passing)
+
+actor User
+
+participant "SystemMain (main thread)" as MAIN
+participant "FireIncidentSubsystem (thread)" as FIS
+participant "Scheduler (thread)" as SCH
+participant "DroneSubsystem (thread)" as DRN
+
+participant "MessageBus" as BUS
+participant "fireEvents queue" as Q_fire
+participant "droneCommands queue" as Q_cmd
+participant "droneStatuses queue" as Q_status
+
+== Startup ==
+User -> MAIN : run main()
+MAIN -> BUS : new MessageBus(50)
+MAIN -> MAIN : new ZoneManager("sample_zone_file.csv")
+MAIN -> FIS : start Thread(FireIncidentSubsystem)
+MAIN -> SCH : start Thread(Scheduler)
+MAIN -> DRN : start Thread(DroneSubsystem)
+
+note right of FIS
+Subsystem threads run concurrently.
+All communication happens via MessageBus queues.
+end note
+
+== FireIncident produces events ==
+FIS -> Q_fire : put(FireEvent)
+
+== Scheduler consumes event and dispatches ==
+SCH -> Q_fire : take()
+SCH -> SCH : enqueue missionQueue
+SCH -> Q_cmd : put(DroneCommand)
+
+== Drone executes mission (state machine) ==
+DRN -> Q_cmd : take()
+DRN -> Q_status : put(DroneStatus: IDLE)
+DRN -> Q_status : put(DroneStatus: EN_ROUTE)
+DRN -> Q_status : put(DroneStatus: DROPPING_AGENT)
+DRN -> Q_status : put(DroneStatus: RETURNING)
+DRN -> Q_status : put(DroneStatus: REFILLING)
+DRN -> Q_status : put(DroneStatus: IDLE)
+
+== Scheduler reacts to drone availability ==
+SCH -> Q_status : take()
+alt status.state == IDLE
+  SCH -> SCH : droneBusy = false
+  SCH -> SCH : dispatchDrone() if missionQueue not empty
+else other status
+  SCH -> SCH : log / ignore for dispatch
+end
+
+@enduml
