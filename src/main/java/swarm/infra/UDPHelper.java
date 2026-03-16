@@ -6,13 +6,14 @@ import java.net.InetAddress;
 import java.net.SocketException;
 
 /**
- * A simple wrapper to handle UDP sending and receiving
+ * A simple wrapper to handle UDP sending and receiving.
+ * Supports configurable destination host for multi-machine deployment (I3).
  */
 public class UDPHelper {
 
     private final DatagramSocket socket;
 
-    // Constructor for Scheduler and DroneSubsytem (need specific port)
+    // Constructor for Scheduler and DroneSubsystem (need specific port)
     public UDPHelper(int listeningPort) throws SocketException {
         socket = new DatagramSocket(listeningPort);
     }
@@ -22,26 +23,26 @@ public class UDPHelper {
         socket = new DatagramSocket();
     }
 
-    // Sends a formatted string message to a specific port
-    public void send(String message, int destinationPort) throws Exception {
+    // Sends to a specific host and port (for multi-machine)
+    public void send(String message, String host, int destinationPort) throws Exception {
         byte[] data = message.getBytes();
-
-        // Uses localhost
         DatagramPacket packet = new DatagramPacket(
-                data,
-                data.length,
-                InetAddress.getLocalHost(),
+                data, data.length,
+                InetAddress.getByName(host),
                 destinationPort
         );
         socket.send(packet);
+    }
+
+    // Convenience: sends to localhost (backwards compatible)
+    public void send(String message, int destinationPort) throws Exception {
+        send(message, "localhost", destinationPort);
     }
 
     public String receive() throws Exception {
         byte[] buffer = new byte[1024];
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
         socket.receive(packet);
-
-        // Convert the byte array to a String
         return new String(packet.getData(), 0, packet.getLength()).trim();
     }
 
