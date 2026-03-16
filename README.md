@@ -1,191 +1,160 @@
-# Firefighting Drone Swarm Simulator
-
-**SYSC 3303 Real-Time Concurrent Systems**\
-**Iteration 3  README**
+# Firefighting Drone Swarm
 
 A modular real-time concurrent system in Java simulating a distributed firefighting drone swarm; it emphasizes inter-subsystem communication, event-driven design, and scalability toward multi-process UDP-based deployment.
 
----
+### Development Process
+The project follows an iterative and incremental development process. GitHub Issues and Pull Requests are used to track development, and merging into the main branch requires two approvals.
 
-## Team Members
+### Team Members
+- [Umniyah Mohammed](https://github.com/UMNIYAH)
+- [Armin Mozafari]()
+- [Liam Perreault]()
+- [Vincent Nguyen]()
 
-* Umniyah Mohammed
-* Armin Mozafari
-* Liam Perreault
-* Vincent Nguyen
+### Team Contribution - Iteration 1
+#### Umniyah
+#### Armin
+#### Liam
+#### Vincent
+
+### Team Contribution - Iteration 2
+#### Umniyah
+#### Armin
+#### Liam
+#### Vincent
+
+### Team Contribution - Iteration 3
+#### Umniyah
+- Refactored codebase structure and cleaned up subsystem packages ([#27](https://github.com/UMNIYAH/Firefighting-Drone-Swarm/pull/27))
+- Implemented multi-drone support: Scheduler with mission queue, per-drone UDP ports, and one-click Launcher ([#28](https://github.com/UMNIYAH/Firefighting-Drone-Swarm/pull/28))
+- Added proximity-based dispatch, load balancing, drone position tracking, and per-drone GUI updates ([#29](https://github.com/UMNIYAH/Firefighting-Drone-Swarm/pull/29))
+#### Armin
+- I3 implementation features
+#### Liam
+- Documentation
+#### Vincent
+- Testing
 
 ---
 ## Setup Instructions
 
-**Requirements**
-
+### Requirements
 * Java JDK 17 (or compatible)
 * IntelliJ IDEA
 
-**Project Setup**
-
-### Option 1 – Download ZIP
+### Project Setup
+#### Option 1 – Download ZIP
 
 1. Extract the assignment from the ZIP file.
 2. Navigate to the extracted project folder.
 
-### Option 2 – Clone from GitHub
-
-1. Clone the repository:
+#### Option 2 – Clone from GitHub
 
 ```
 git clone https://github.com/UMNIYAH/Firefighting-Drone-Swarm.git
 ```
 
-2. Navigate to the project directory.
-
-### Open the Project
+#### Open the Project
 
 1. Open the project in IntelliJ IDEA.
 2. Configure the JDK if prompted.
 3. Build the project using IntelliJ build tools.
 
 ---
+
 ## Running the System
 
-### Option 1 - using the launcher
-1. Run Launcher.java
+### Option 1 – Using the Launcher (recommended)
 
-### Option 2 - running subsystems manually
+1. Run `Launcher.java`
+2. To run with multiple drones, set the program argument to the desired count (e.g., `3`). Defaults to 1.
 
+### Option 2 – Running subsystems manually (in this order)
 
-1. Run SimulatorGUI.java
-2. Run the Scheduler.java
-3. Run the DroneSubsystem.java
-4. Run the FireIncidentSubsystem.java
+1. Run `SimulatorGUI.java` - wait for the GUI window to appear
+2. Run `Scheduler.java` - wait for `[Scheduler] Listening on port 5000...`
+3. Run `DroneSubsystem.java` - wait for `[Drone 1] Listening on port 6001...`
+4. Run `FireIncidentSubsystem.java` - run **last**, it sends events immediately
+
+> **Note:** When running manually, each subsystem has its own `main()` and communicates via UDP on `localhost`. The Scheduler listens on port 5000, and each drone listens on port `6000 + droneId`.
 
 ---
 
 ## Testing Instructions
 
-Running Tests
-
-1. Open the test directory in IntelliJ.
-2. Right-click the test package
-3. Select Run All Tests
+1. Open the test directory under `Deliverables/I2/src/main/tests/` in IntelliJ.
+2. Right-click the test package.
+3. Select **Run All Tests**.
 
 ---
+
+## System Architecture
+
+All subsystems communicate via UDP using a simple text-based protocol:
+* `FIRE:<zoneId>:<severity>:<eventType>` - Fire events sent to Scheduler (port 5000)
+* `CMD:<zoneId>:<severity>` - Commands sent from Scheduler to Drone (port 6000 + droneId)
+* `STATUS:<droneId>:<state>:<zoneId>:<posX>:<posY>` - Status updates sent from Drone to Scheduler (port 5000)
+
+---
+
 ## System Components
 
 ### Scheduler
 
-The Scheduler acts as the central control system.
+The Scheduler acts as the central coordination system.
 
 Responsibilities:
-
-* Receives fire requests from the Fire Incident Subsystem
-* Determines which drone should respond
-* Dispatches commands to drones
-* Receives drone status updates
-* Monitors drone states and incident progress
-
-The Scheduler distributes work among drones to balance the workload and reduce fire response time.
+* Receives fire events from the Fire Incident Subsystem via UDP
+* Maintains a mission queue for pending fire incidents
+* Dispatches the **closest idle drone** to the fire zone
+* Balances workload across drones using completed mission count as a tiebreaker
+* Tracks drone positions, states, and ports
+* Receives drone status updates and re-dispatches queued missions when drones become idle
 
 ### Drone Subsystem
 
-Each DroneSubsystem instance simulates an individual drone.
+Each `DroneSubsystem` instance simulates an individual drone.
 
 Responsibilities:
-
-* Receives commands from the Scheduler
-* Simulates travel to fire zones
-* Simulates firefighting agent deployment
-* Returns to base and refills when necessary
-* Sends status updates to the Scheduler
-
-Drone state machine states include:
-
-* IDLE
-* EN_ROUTE
-* DROPPING_AGENT
-* RETURNING
-* REFILLING
-
-Each drone maintains an internal state, including:
-
-* current position
-* remaining firefighting agent
-* mission status
+* Listens for commands from the Scheduler on its own UDP port (`6000 + droneId`)
+* Simulates travel to fire zones with distance-based flight time
+* Simulates firefighting agent deployment (door cycle + flow rate)
+* Returns to base and refills agent capacity
+* Reports status and position back to the Scheduler after each state transition
+* Drone state lifecycle: `IDLE → EN_ROUTE → ARRIVED → DROPPING_AGENT → RETURNING → REFILLING → IDLE`
 
 ### Fire Incident Subsystem
 
-The Fire Incident Subsystem simulates fire events occurring in different zones.
+Reads fire events from a CSV file and sends them to the Scheduler.
 
 Responsibilities:
-
-* Reads fire incidents from a CSV input file
-* Generates fire requests
-* Sends fire events to the Scheduler
-
-Each fire request includes:
-
-* zone ID
-* fire severity
-* event timestamp
-
-## Infrastructure Components
-
-### UDPHelper
-
-Provides a simplified interface for sending and receiving UDP packets between subsystems.
-
-Responsibilities include:
-
-* sending UDP datagrams
-* receiving UDP messages
-* handling socket communication
-
-### ZoneManager
-
-Loads zone configuration data from a CSV file and provides zone location information used by drones for navigation.
+* Parses fire event data (time, zone, event type, severity) from CSV input
+* Serializes events and sends them to the Scheduler via UDP (port 5000)
+* Supports configurable input files
 
 ### Simulator GUI
 
-The GUI provides a visualization of the system, including:
+Provides a real-time visual display of the system.
 
-* fire incidents across zones
-* drone state changes
-* system event logs
-* active incident counter
+Responsibilities:
+* Displays a 3×3 zone map with fire indicators and severity labels
+* Shows which drone is assigned to each active fire zone
+* Displays per-drone state and current zone assignment
+* Tracks active incident count
+* Logs all subsystem events in a scrollable log panel
 
-The GUI acts as a monitoring interface for the simulation.
+### Launcher
 
----
+One-click entry point that starts all subsystems in the correct order.
 
-## Simulation Configuration
-
-The simulation is configurable using input files and constants.
-
-Examples include:
-
-* number of drones
-* number of fire zones
-* drone agent capacity
-* travel speed
-* firefighting agent drop time
-
-These parameters allow the simulation to model different operational scenarios.
-
----
-
-
-## Deliverables Iteration 3
-
-* Java source files (.java)
-* Test files
-* UML class and sequence diagrams
-* IntelliJ project configuration files
-* README.txt
+Responsibilities:
+* Starts GUI → Scheduler → Drone(s) → FireIncidentSubsystem with proper timing delays
+* Ensures each subsystem's UDP port is bound before dependent subsystems start
+* Supports configurable drone count via command-line argument
 
 ---
 
 ## Project Structure
-
 ```
 Firefighting-Drone-Swarm/
 │
@@ -232,3 +201,17 @@ Firefighting-Drone-Swarm/
 └── SYSC3303A W26 Project V2.1.pdf # Official project specification
 ```
 ---
+<<<<<<< Updated upstream
+=======
+## Documentation and Submissions
+
+Deliverables will be added as the project progresses.
+
+* [Iteration 0](/I0)
+* [Iteration 1](/I1)
+* [Iteration 2](/I2)
+* [Iteration 3](/I3)
+* [Iteration 4](/I4)
+* [Iteration 5](/I5)
+* [Final Report](/Final%20Project%20Submission)
+>>>>>>> Stashed changes
