@@ -1,9 +1,12 @@
 package swarm.subsystems;
 
 import swarm.infra.UDPHelper;
+import swarm.infra.ZoneManager;
 import swarm.main.SimulatorGUI;
 import swarm.messages.DroneState;
+import swarm.model.Position;
 
+import java.io.IOException;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Queue;
@@ -18,20 +21,25 @@ import java.util.concurrent.ConcurrentHashMap;
  * 3. Send commands to the DroneSubsystem(s)
  * 4. Receive and log drone status updates
  *
- * Iteration 3: supports multiple drones with balanced scheduling.
  */
 public class Scheduler implements Runnable {
 
     private final UDPHelper udp;
-    private final Queue<String> missionQueue = new LinkedList<>(); // "zoneId:severity"
-    private final Map<Integer, Integer> dronePorts = new ConcurrentHashMap<>();   // droneId → port
-    private final Map<Integer, DroneState> droneStates = new ConcurrentHashMap<>(); // droneId → state
+    private final ZoneManager zoneManager;
+    private final Queue<String> missionQueue = new LinkedList<>();
+    private final Map<Integer, Integer> dronePorts = new ConcurrentHashMap<>();
+    private final Map<Integer, DroneState> droneStates = new ConcurrentHashMap<>();
+    private final Map<Integer, Position> dronePositions = new ConcurrentHashMap<>();
+    private final Map<Integer, Integer> droneCompletedMissions = new ConcurrentHashMap<>();
 
-    public Scheduler(UDPHelper udp, int numDrones) {
+    public Scheduler(UDPHelper udp, int numDrones, ZoneManager zoneManager) {
         this.udp = udp;
+        this.zoneManager = zoneManager;
         for (int i = 1; i <= numDrones; i++) {
             dronePorts.put(i, 6000 + i);
             droneStates.put(i, DroneState.IDLE);
+            dronePositions.put(i, new Position(0, 0)); // base
+            droneCompletedMissions.put(i, 0);
         }
     }
 
@@ -62,11 +70,10 @@ public class Scheduler implements Runnable {
 
             if (SimulatorGUI.instance != null) {
                 SimulatorGUI.instance.incrementFire();
-                SimulatorGUI.instance.setZoneOnFire(zoneId);
-                SimulatorGUI.instance.log("NEW INCIDENT: Zone " + zoneId);
+                SimulatorGUI.instance.setZoneOnFire(zoneId, severity);
+                SimulatorGUI.instance.log("NEW INCIDENT: Zone " + zoneId + " [" + severity + "]");
             }
 
-            // Queue the mission and attempt dispatch
             synchronized (missionQueue) {
                 missionQueue.add(zoneId + ":" + severity);
             }
@@ -77,25 +84,31 @@ public class Scheduler implements Runnable {
             DroneState state = DroneState.valueOf(parts[2]);
             int zoneId = Integer.parseInt(parts[3]);
 
-            // Update drone state tracking
+            // Parse position from extended STATUS message
+            if (parts.length >= 6) {
+                double posX = Double.parseDouble(parts[4]);
+                double posY = Double.parseDouble(parts[5]);
+                dronePositions.put(droneId, new Position(posX, posY));
+            }
+
             droneStates.put(droneId, state);
 
             System.out.println("[Drone " + droneId + "] is now " + state + " (Zone " + zoneId + ")");
 
             if (SimulatorGUI.instance != null) {
                 String zoneText = (zoneId != 0) ? " (Zone " + zoneId + ")" : "";
+                SimulatorGUI.instance.updateDroneInfo(droneId, state, zoneId);
                 SimulatorGUI.instance.log("[Drone " + droneId + "] is now " + state + zoneText);
-                SimulatorGUI.instance.updateDroneState(droneId, state);
 
                 if (state == DroneState.DROPPING_AGENT) {
                     SimulatorGUI.instance.clearZone(zoneId);
                 }
                 if (state == DroneState.IDLE) {
                     SimulatorGUI.instance.decrementFire();
+                    droneCompletedMissions.merge(droneId, 1, Integer::sum);
                 }
             }
 
-            // If drone just became idle, try to assign next mission
             if (state == DroneState.IDLE) {
                 tryDispatch();
             }
@@ -109,12 +122,33 @@ public class Scheduler implements Runnable {
         synchronized (missionQueue) {
             if (missionQueue.isEmpty()) return;
 
-            // Find first idle drone
+            // Peek at the target zone to calculate distances
+            String nextMission = missionQueue.peek();
+            int targetZoneId = Integer.parseInt(nextMission.split(":")[0]);
+            Position targetPos = zoneManager.getZoneCenter(targetZoneId);
+
+            if (targetPos == null) {
+                missionQueue.poll(); // discard invalid mission
+                return;
+            }
+
+            // Find closest idle drone, break ties by fewest completed missions
             Integer bestDroneId = null;
+            double bestDistance = Double.MAX_VALUE;
+            int bestCompleted = Integer.MAX_VALUE;
+
             for (Map.Entry<Integer, DroneState> entry : droneStates.entrySet()) {
                 if (entry.getValue() == DroneState.IDLE) {
-                    bestDroneId = entry.getKey();
-                    break;
+                    int id = entry.getKey();
+                    Position dronePos = dronePositions.get(id);
+                    double dist = dronePos.distanceTo(targetPos);
+                    int completed = droneCompletedMissions.getOrDefault(id, 0);
+
+                    if (dist < bestDistance || (dist == bestDistance && completed < bestCompleted)) {
+                        bestDroneId = id;
+                        bestDistance = dist;
+                        bestCompleted = completed;
+                    }
                 }
             }
 
@@ -124,16 +158,20 @@ public class Scheduler implements Runnable {
             }
 
             String mission = missionQueue.poll();
+            String severity = mission.split(":")[1];
             int dronePort = dronePorts.get(bestDroneId);
-            droneStates.put(bestDroneId, DroneState.EN_ROUTE); // Mark busy immediately
+            droneStates.put(bestDroneId, DroneState.EN_ROUTE);
 
             try {
                 String cmdMessage = "CMD:" + mission;
                 udp.send(cmdMessage, dronePort);
                 System.out.println("[Scheduler] Dispatched Drone " + bestDroneId + " to mission " + mission);
+
+                if (SimulatorGUI.instance != null) {
+                    SimulatorGUI.instance.setZoneDrone(targetZoneId, bestDroneId);
+                }
             } catch (Exception e) {
                 System.err.println("[Scheduler] Failed to dispatch Drone " + bestDroneId);
-                // Put mission back in queue
                 missionQueue.add(mission);
                 droneStates.put(bestDroneId, DroneState.IDLE);
             }
@@ -143,8 +181,9 @@ public class Scheduler implements Runnable {
     public static void main(String[] args) {
         try {
             int numDrones = args.length > 0 ? Integer.parseInt(args[0]) : 1;
+            ZoneManager zm = new ZoneManager("sample_zone_file.csv");
             UDPHelper udp = new UDPHelper(5000);
-            new Scheduler(udp, numDrones).run();
+            new Scheduler(udp, numDrones, zm).run();
         } catch (Exception e) {
             System.err.println("Failed to start Scheduler");
             e.printStackTrace();

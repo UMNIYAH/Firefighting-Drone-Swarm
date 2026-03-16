@@ -3,8 +3,6 @@ package swarm.main;
 import swarm.infra.UDPHelper;
 import swarm.infra.ZoneManager;
 import swarm.messages.DroneState;
-import swarm.messages.DroneStatus;
-import swarm.messages.FireEvent;
 import swarm.subsystems.FireIncidentSubsystem;
 import swarm.subsystems.Scheduler;
 import swarm.subsystems.DroneSubsystem;
@@ -15,6 +13,7 @@ import java.io.IOException;
 import java.net.SocketException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class SimulatorGUI {
@@ -24,75 +23,92 @@ public class SimulatorGUI {
     private final JTextArea logArea = new JTextArea();
     private final ZoneManager zoneManager;
 
-    private final JLabel droneStateLabel = new JLabel("Drone State: IDLE");
+    // Per-drone state display
+    private final JPanel dronePanel = new JPanel();
+    private final Map<Integer, JLabel> droneLabels = new ConcurrentHashMap<>();
+
     private final JLabel incidentCounterLabel = new JLabel("Active Incidents: 0");
     private final AtomicInteger activeIncidents = new AtomicInteger(0);
 
     private final Map<Integer, JLabel> zoneStatusLabels = new HashMap<>();
+    private final Map<Integer, JLabel> zoneSeverityLabels = new HashMap<>();
+    private final Map<Integer, JLabel> zoneDroneLabels = new HashMap<>();
 
     public SimulatorGUI() {
         instance = this;
 
-        // Load ZoneManager
         ZoneManager tempZoneManager = null;
-        try{
+        try {
             tempZoneManager = new ZoneManager("sample_zone_file.csv");
-        } catch (IOException e){
+        } catch (IOException e) {
             JOptionPane.showMessageDialog(null, "Failed to load zone file: " + e.getMessage());
             System.exit(1);
         }
         zoneManager = tempZoneManager;
 
-        JFrame frame = new JFrame("Firefighting Drone Simulator – Iteration 1");
-        frame.setSize(850, 500);
+        JFrame frame = new JFrame("Firefighting Drone Simulator – Iteration 3");
+        frame.setSize(950, 600);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLayout(new BorderLayout());
 
-        // panel
-        JPanel statsPanel = new JPanel(new GridLayout(1, 2));
+        // Top panel: drone states + incident counter
+        JPanel statsPanel = new JPanel(new BorderLayout());
         statsPanel.setBorder(BorderFactory.createTitledBorder("System Monitor"));
 
-        droneStateLabel.setFont(new Font("Arial", Font.BOLD, 20));
-        incidentCounterLabel.setFont(new Font("Arial", Font.BOLD, 20));
+        dronePanel.setLayout(new BoxLayout(dronePanel, BoxLayout.Y_AXIS));
+        statsPanel.add(dronePanel, BorderLayout.CENTER);
 
-        statsPanel.add(droneStateLabel);
-        statsPanel.add(incidentCounterLabel);
+        incidentCounterLabel.setFont(new Font("Arial", Font.BOLD, 18));
+        statsPanel.add(incidentCounterLabel, BorderLayout.EAST);
+
         frame.add(statsPanel, BorderLayout.NORTH);
 
         // Zone Map (3x3 Grid)
         JPanel gridPanel = new JPanel(new GridLayout(3, 3, 0, 0));
         gridPanel.setBorder(BorderFactory.createTitledBorder("Zone Map"));
 
-        // Map Border
         JPanel mapContainer = new JPanel(new BorderLayout());
         mapContainer.setBorder(BorderFactory.createLineBorder(Color.BLACK, 3));
 
-        for (int i = 1; i <= 9; i++){
+        for (int i = 1; i <= 9; i++) {
             JPanel cell = new JPanel(new BorderLayout());
             cell.setBackground(Color.WHITE);
             cell.setBorder(BorderFactory.createLineBorder(Color.BLACK, 1));
 
-            // Zone
             JLabel nameLabel = new JLabel("Zone " + i, SwingConstants.CENTER);
             nameLabel.setFont(new Font("Arial", Font.PLAIN, 14));
             nameLabel.setForeground(Color.DARK_GRAY);
             cell.add(nameLabel, BorderLayout.NORTH);
 
-            // Fire zone
+            // Fire icon area
             JLabel statusLabel = new JLabel("", SwingConstants.CENTER);
             statusLabel.setFont(new Font("Arial", Font.BOLD, 36));
             cell.add(statusLabel, BorderLayout.CENTER);
+            zoneStatusLabels.put(i, statusLabel);
+
+            // Bottom of cell: severity + assigned drone
+            JPanel cellInfo = new JPanel(new GridLayout(2, 1));
+            JLabel sevLabel = new JLabel("", SwingConstants.CENTER);
+            sevLabel.setFont(new Font("Arial", Font.PLAIN, 11));
+            sevLabel.setForeground(Color.RED);
+            cellInfo.add(sevLabel);
+            zoneSeverityLabels.put(i, sevLabel);
+
+            JLabel drLabel = new JLabel("", SwingConstants.CENTER);
+            drLabel.setFont(new Font("Arial", Font.ITALIC, 11));
+            drLabel.setForeground(Color.BLUE);
+            cellInfo.add(drLabel);
+            zoneDroneLabels.put(i, drLabel);
+
+            cell.add(cellInfo, BorderLayout.SOUTH);
 
             gridPanel.add(cell);
-            zoneStatusLabels.put(i, statusLabel);
         }
         mapContainer.add(gridPanel, BorderLayout.CENTER);
 
-        // Padding outside of map
         JPanel mapWrapper = new JPanel(new BorderLayout());
         mapWrapper.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         mapWrapper.add(mapContainer, BorderLayout.CENTER);
-
         frame.add(mapWrapper, BorderLayout.CENTER);
 
         // Log window
@@ -137,28 +153,59 @@ public class SimulatorGUI {
         }
     }
 
-    public void updateDroneState(int droneId, DroneState state) {
-        SwingUtilities.invokeLater(() -> droneStateLabel.setText("Drone " + droneId + ": " + state));
+    /** Update per-drone state display in the top panel */
+    public void updateDroneInfo(int droneId, DroneState state, int zoneId) {
+        SwingUtilities.invokeLater(() -> {
+            JLabel label = droneLabels.get(droneId);
+            if (label == null) {
+                label = new JLabel();
+                label.setFont(new Font("Arial", Font.BOLD, 14));
+                droneLabels.put(droneId, label);
+                dronePanel.add(label);
+                dronePanel.revalidate();
+            }
+            String zoneText = (zoneId != 0) ? " → Zone " + zoneId : "";
+            label.setText("Drone " + droneId + ": " + state + zoneText);
+        });
     }
 
-    public void setZoneOnFire(int zoneId){
+    /** Show fire icon + severity on the zone map */
+    public void setZoneOnFire(int zoneId, String severity) {
         SwingUtilities.invokeLater(() -> {
             JLabel label = zoneStatusLabels.get(zoneId);
-            if(label != null){
+            if (label != null) {
                 ImageIcon fireIcon = new ImageIcon("fire.png");
                 label.setIcon(fireIcon);
                 label.setText("");
             }
+            JLabel sevLabel = zoneSeverityLabels.get(zoneId);
+            if (sevLabel != null) {
+                sevLabel.setText(severity);
+            }
         });
     }
 
-    public void clearZone(int zoneId){
+    /** Show which drone is assigned to a zone */
+    public void setZoneDrone(int zoneId, int droneId) {
+        SwingUtilities.invokeLater(() -> {
+            JLabel drLabel = zoneDroneLabels.get(zoneId);
+            if (drLabel != null) {
+                drLabel.setText("Drone " + droneId);
+            }
+        });
+    }
+
+    public void clearZone(int zoneId) {
         SwingUtilities.invokeLater(() -> {
             JLabel label = zoneStatusLabels.get(zoneId);
-            if(label != null){
+            if (label != null) {
                 label.setIcon(null);
                 label.setText("");
             }
+            JLabel sevLabel = zoneSeverityLabels.get(zoneId);
+            if (sevLabel != null) sevLabel.setText("");
+            JLabel drLabel = zoneDroneLabels.get(zoneId);
+            if (drLabel != null) drLabel.setText("");
         });
     }
 
