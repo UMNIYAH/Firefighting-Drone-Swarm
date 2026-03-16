@@ -26,17 +26,16 @@ public class Launcher {
                 // Small delay to let GUI initialize
                 Thread.sleep(500);
 
-                // 3. Start Scheduler (port 5000)
+                ZoneManager zm = new ZoneManager("sample_zone_file.csv");
                 UDPHelper schedulerUdp = new UDPHelper(5000);
-                new Thread(new Scheduler(schedulerUdp, numDrones), "Scheduler").start();
+                new Thread(new Scheduler(schedulerUdp, numDrones, zm), "Scheduler").start();
                 System.out.println("[Launcher] Scheduler started on port 5000");
 
-                // 4. Start Drone(s) (port 6001, 6002, ...)
-                ZoneManager zm = new ZoneManager("sample_zone_file.csv");
                 for (int i = 1; i <= numDrones; i++) {
                     int port = 6000 + i;
+                    ZoneManager droneZm = new ZoneManager("sample_zone_file.csv");
                     UDPHelper droneUdp = new UDPHelper(port);
-                    new Thread(new DroneSubsystem(droneUdp, i, port, zm), "Drone-" + i).start();
+                    new Thread(new DroneSubsystem(droneUdp, i, port, droneZm), "Drone-" + i).start();
                     System.out.println("[Launcher] Drone " + i + " started on port " + port);
                 }
 

@@ -96,7 +96,9 @@ public class DroneSubsystem implements Runnable {
     private void reportStatus(DroneState state, Integer zoneId) {
         try {
             String zoneIdString = (zoneId != null) ? String.valueOf(zoneId) : "0";
-            String statusMessage = "STATUS:" + droneId + ":" + state.name() + ":" + zoneIdString;
+            // Append position so Scheduler knows where each drone is
+            String statusMessage = "STATUS:" + droneId + ":" + state.name() + ":" + zoneIdString
+                    + ":" + currentPosition.x() + ":" + currentPosition.y();
             udp.send(statusMessage, 5000);
 
             if (SimulatorGUI.instance != null) {
