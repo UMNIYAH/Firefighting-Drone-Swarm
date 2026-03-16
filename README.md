@@ -16,6 +16,22 @@ The project follows an iterative and incremental development process. GitHub Iss
 #### Liam
 #### Vincent
 
+### Team Contribution - Iteration 2
+#### Umniyah
+#### Armin
+#### Liam
+#### Vincent
+
+### Team Contribution - Iteration 3
+#### Umniyah
+- Refactored codebase structure and cleaned up subsystem packages ([#27](https://github.com/UMNIYAH/Firefighting-Drone-Swarm/pull/27))
+- Implemented multi-drone support: Scheduler with mission queue, per-drone UDP ports, and one-click Launcher ([#28](https://github.com/UMNIYAH/Firefighting-Drone-Swarm/pull/28))
+- Added proximity-based dispatch, load balancing, drone position tracking, and per-drone GUI updates ([#29](https://github.com/UMNIYAH/Firefighting-Drone-Swarm/pull/29))
+
+#### Armin
+#### Liam
+#### Vincent
+
 ### Documentation and Submissions
 Deliverables will be added as the project progresses.
 - [Iteration 0](/I0)
