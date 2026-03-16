@@ -25,7 +25,7 @@ public class Launcher {
             try {
                 // Small delay to let GUI initialize
                 Thread.sleep(500);
-
+                
                 ZoneManager zm = new ZoneManager("sample_zone_file.csv");
                 UDPHelper schedulerUdp = new UDPHelper(5000);
                 new Thread(new Scheduler(schedulerUdp, numDrones, zm), "Scheduler").start();
