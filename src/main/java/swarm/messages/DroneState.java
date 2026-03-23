@@ -1,7 +1,7 @@
 package swarm.messages;
 
 /**
- * Drone lifecycle states for Iteration 2.
+ * Drone lifecycle states.
  */
 public enum DroneState {
     IDLE,
@@ -10,5 +10,6 @@ public enum DroneState {
     DROPPING_AGENT,
     RETURNING,
     REFILLING,
-    FAULT
+    SOFT_FAULT,
+    HARD_FAULT
 }

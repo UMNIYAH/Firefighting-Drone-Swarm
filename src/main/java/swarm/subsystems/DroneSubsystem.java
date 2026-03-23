@@ -5,6 +5,7 @@ import swarm.infra.UDPHelper;
 import swarm.infra.ZoneManager;
 import swarm.main.SimulatorGUI;
 import swarm.messages.DroneState;
+import swarm.messages.FaultType;
 import swarm.messages.Severity;
 import swarm.model.Position;
 
@@ -58,34 +59,34 @@ public class DroneSubsystem implements Runnable {
                     }
 
                     // EN_ROUTE
-                    reportStatus(DroneState.EN_ROUTE, zoneId);
+                    reportStatus(DroneState.EN_ROUTE, zoneId, FaultType.NONE);
                     long flightTime = DroneConfig.travelTimeMillis(currentPosition.distanceTo(target));
                     Thread.sleep(flightTime / 10);
                     currentPosition = target;
 
                     // ARRIVED
-                    reportStatus(DroneState.ARRIVED, zoneId);
+                    reportStatus(DroneState.ARRIVED, zoneId, FaultType.NONE);
 
                     // DROPPING_AGENT
-                    reportStatus(DroneState.DROPPING_AGENT, zoneId);
+                    reportStatus(DroneState.DROPPING_AGENT, zoneId, FaultType.NONE);
                     long dropTime = DroneConfig.dropTimeMillis(severity.litersRequired())
                             + DroneConfig.doorOpenCloseMillis();
                     Thread.sleep(dropTime / 10);
                     currentAgent -= severity.litersRequired();
 
                     // RETURNING
-                    reportStatus(DroneState.RETURNING, zoneId);
+                    reportStatus(DroneState.RETURNING, zoneId, FaultType.NONE);
                     long returnTime = DroneConfig.travelTimeMillis(currentPosition.distanceTo(DroneConfig.BASE_POSITION));
                     Thread.sleep(returnTime / 10);
 
                     // REFILLING
                     currentPosition = DroneConfig.BASE_POSITION;
                     currentAgent = DroneConfig.AGENT_CAPACITY_LITERS;
-                    reportStatus(DroneState.REFILLING, zoneId);
+                    reportStatus(DroneState.REFILLING, zoneId, FaultType.NONE);
                     Thread.sleep(200);
 
                     // IDLE
-                    reportStatus(DroneState.IDLE, null);
+                    reportStatus(DroneState.IDLE, null, FaultType.NONE);
                 }
             } catch (Exception e) {
                 System.err.println("[Drone " + droneId + "] Error: " + e.getMessage());
@@ -93,12 +94,13 @@ public class DroneSubsystem implements Runnable {
         }
     }
 
-    private void reportStatus(DroneState state, Integer zoneId) {
+    private void reportStatus(DroneState state, Integer zoneId, FaultType faultType) {
         try {
             String zoneIdString = (zoneId != null) ? String.valueOf(zoneId) : "0";
-            // Append position so Scheduler knows where each drone is
+            // Append position and fault type so Scheduler knows drone state
             String statusMessage = "STATUS:" + droneId + ":" + state.name() + ":" + zoneIdString
-                    + ":" + currentPosition.x() + ":" + currentPosition.y();
+                    + ":" + currentPosition.x() + ":" + currentPosition.y()
+                    + ":" + faultType.name();
             udp.send(statusMessage, 5000);
 
             if (SimulatorGUI.instance != null) {

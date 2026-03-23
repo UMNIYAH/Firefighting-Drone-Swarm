@@ -4,6 +4,7 @@ import swarm.infra.UDPHelper;
 import swarm.main.SimulatorGUI;
 import swarm.messages.DroneStatus;
 import swarm.messages.EventType;
+import swarm.messages.FaultType;
 import swarm.messages.FireEvent;
 import swarm.messages.Severity;
 
@@ -61,8 +62,8 @@ public class FireIncidentSubsystem implements Runnable{
                 // Separate The line into individual parameters
                 String[] parameter = line.split(",");
 
-                // Skip invalid lines
-                if (parameter.length != 4) { continue; }
+                // Skip invalid lines (accept 4 columns or 5 with fault)
+                if (parameter.length < 4 || parameter.length > 5) { continue; }
 
                 try {
 
@@ -77,8 +78,14 @@ public class FireIncidentSubsystem implements Runnable{
                     EventType type = EventType.valueOf(parameter[2].trim());
                     Severity severity = Severity.valueOf(parameter[3].trim().toUpperCase());
 
+                    // Parse fault type; default to NONE if absent
+                    FaultType fault = (parameter.length >= 5)
+                            ? FaultType.valueOf(parameter[4].trim().toUpperCase())
+                            : FaultType.NONE;
+
                     // Serialization and UDP
-                    String message = "FIRE:" + zoneId + ":" + severity.name() + ":" + type.name();
+                    String message = "FIRE:" + zoneId + ":" + severity.name() + ":" + type.name()
+                            + ":" + fault.name();
                     udp.send(message, 5000);
 
                     Thread.sleep(1000);
