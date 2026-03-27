@@ -4,6 +4,7 @@ import swarm.infra.UDPHelper;
 import swarm.infra.ZoneManager;
 import swarm.main.SimulatorGUI;
 import swarm.messages.DroneState;
+import swarm.messages.FaultType;
 import swarm.model.Position;
 
 import java.io.IOException;
@@ -90,6 +91,8 @@ public class Scheduler implements Runnable {
                 double posY = Double.parseDouble(parts[5]);
                 dronePositions.put(droneId, new Position(posX, posY));
             }
+
+            FaultType fault = (parts.length >= 5) ? FaultType.valueOf(parts[4]) : FaultType.NONE;
 
             droneStates.put(droneId, state);
 
