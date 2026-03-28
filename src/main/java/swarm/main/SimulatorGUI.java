@@ -145,6 +145,9 @@ public class SimulatorGUI {
 
         logArea.setEditable(false);
         logArea.setFont(new Font("Monospaced", Font.PLAIN, 11));
+        logArea.setMargin(new Insets(5,5,5,5));
+        logArea.setLineWrap(true);
+        logArea.setWrapStyleWord(true);
         JScrollPane logScroll = new JScrollPane(logArea);
         // Give the log a fixed preferred + minimum width
         Dimension logDim = new Dimension(250, 0);
@@ -325,6 +328,10 @@ public class SimulatorGUI {
                 int dx = cx(rs.renderX), dy = cy(rs.renderY);
                 drawDiamond(g2, dx, dy, HALF, c);
 
+                // White Background behind text
+                g2.setColor(new  Color(255, 255,255, 200));
+                g2.fillRoundRect(dx - 7, dy - HALF - 13, 22, 12, 4, 4);
+
                 g2.setColor(Color.DARK_GRAY);
                 g2.setFont(new Font("Arial", Font.BOLD, 10));
                 g2.drawString("D" + droneId, dx - 5, dy - HALF - 3);
@@ -347,7 +354,8 @@ public class SimulatorGUI {
 
     public void log(String msg) {
         SwingUtilities.invokeLater(() -> {
-            logArea.append(msg + "\n");
+            String timeStr = java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
+            logArea.append("[" + timeStr + "] " + msg + "\n");
             logArea.setCaretPosition(logArea.getDocument().getLength());
         });
     }
@@ -480,6 +488,10 @@ public class SimulatorGUI {
             setLayout(new FlowLayout(FlowLayout.LEFT, 5, 2));
             setOpaque(true);
             setBackground(new Color(245, 245, 245));
+            setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(new Color(220, 220, 220), 1),
+                    BorderFactory.createEmptyBorder(2, 5, 2, 5))
+            );
             setMaximumSize(new Dimension(Integer.MAX_VALUE, 30));
 
             diamond = new JLabel("◆");
