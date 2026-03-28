@@ -10,30 +10,22 @@ import swarm.messages.Severity;
 import swarm.model.Position;
 
 /**
- * Drone subsystem – Iteration 4.
+ * Drone subsystem.
  *
- * Fault behaviours (injected via the CMD's fault field):
+ * Responsibilities:
+ * 1. Receives commands from the Scheduler
+ * 2. Simulates drone flight, agent drop, and return
+ * 3. Reports status back to the Scheduler
+ * 4. Injects faults (DRONE_STUCK, NOZZLE_JAMMED, PACKET_LOSS) based on CMD
  *
- *   DRONE_STUCK   – drone freezes mid-flight (soft fault).
- *                   Reports SOFT_FAULT, sleeps for STUCK_RESET_MS, then
- *                   sends IDLE so the Scheduler can reassign the mission.
- *                   The watchdog on the Scheduler side also fires independently;
- *                   whichever resolves first wins.
- *
- *   NOZZLE_JAMMED – hard fault during the DROPPING_AGENT phase.
- *                   Reports HARD_FAULT and permanently stops processing
- *                   new missions (exits the mission loop).
- *
- *   PACKET_LOSS   – two consecutive STATUS messages are silently dropped
- *                   just before DROPPING_AGENT, simulating network loss.
- *                   The drone eventually completes the mission normally.
+ * Iteration 4: fault injection added via fault field in CMD message.
  */
 public class DroneSubsystem implements Runnable {
 
-    /** How long (ms, simulation-scaled) a stuck drone is frozen before self-recovery. */
+    // Reset delay for a stuck drone before self-recovery
     private static final long STUCK_RESET_MS = 3_000;
 
-    /** Number of consecutive STATUS messages dropped for PACKET_LOSS. */
+    // Number of STATUS messages silently dropped for PACKET_LOSS
     private static final int PACKET_LOSS_DROP_COUNT = 2;
 
     private final UDPHelper udp;
@@ -43,7 +35,7 @@ public class DroneSubsystem implements Runnable {
     private int currentAgent;
     private Position currentPosition;
 
-    /** When true the drone has suffered a hard fault and will not accept more missions. */
+    // Set to true on NOZZLE_JAMMED — stops the mission loop permanently
     private volatile boolean hardFaulted = false;
 
     public DroneSubsystem(UDPHelper udp, int droneId, int port, ZoneManager zoneManager) {
@@ -55,19 +47,11 @@ public class DroneSubsystem implements Runnable {
         this.currentPosition = DroneConfig.BASE_POSITION;
     }
 
-    // =========================================================================
-    // Runnable entry point
-    // =========================================================================
-
     @Override
     public void run() {
         System.out.println("[Drone " + droneId + "] Listening on port " + port + "...");
         new Thread(this::processMissions, "Drone-" + droneId + "-Processor").start();
     }
-
-    // =========================================================================
-    // Mission processing loop
-    // =========================================================================
 
     private void processMissions() {
         while (!hardFaulted) {
@@ -100,10 +84,6 @@ public class DroneSubsystem implements Runnable {
         }
         System.out.println("[Drone " + droneId + "] Mission loop terminated (hard fault).");
     }
-
-    // =========================================================================
-    // Single mission execution with fault injection
-    // =========================================================================
 
     private void executeMission(int zoneId, Severity severity, Position target, FaultType fault)
             throws InterruptedException {
@@ -173,14 +153,7 @@ public class DroneSubsystem implements Runnable {
         reportStatus(DroneState.IDLE, null, FaultType.NONE);
     }
 
-    // =========================================================================
-    // Status reporting helpers
-    // =========================================================================
-
-    /**
-     * Sends a STATUS message to the Scheduler.
-     * Format: STATUS:droneId:state:zoneId:posX:posY:faultType
-     */
+    /** Sends a STATUS message to the Scheduler. Format: STATUS:droneId:state:zoneId:posX:posY:faultType */
     private void reportStatus(DroneState state, Integer zoneId, FaultType faultType) {
         try {
             String zoneIdStr = (zoneId != null) ? String.valueOf(zoneId) : "0";
@@ -202,9 +175,7 @@ public class DroneSubsystem implements Runnable {
         }
     }
 
-    /**
-     * Like reportStatus but optionally silently drops the message (PACKET_LOSS simulation).
-     */
+    /** Like reportStatus but silently skips the UDP send when drop is true (PACKET_LOSS). */
     private void reportStatusMaybeDropped(DroneState state, Integer zoneId,
                                           FaultType faultType, boolean drop) {
         if (drop) {
@@ -218,10 +189,6 @@ public class DroneSubsystem implements Runnable {
             reportStatus(state, zoneId, faultType);
         }
     }
-
-    // =========================================================================
-    // Standalone entry point
-    // =========================================================================
 
     public static void main(String[] args) {
         try {

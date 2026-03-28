@@ -13,27 +13,16 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * Scheduler subsystem – Iteration 4.
+ * Scheduler subsystem.
  *
- * Changes over Iteration 3:
- *  • Forwards the fault type from FIRE messages to drone CMD messages.
- *  • Parses STATUS messages correctly (fault field is at index 6, not 4).
- *  • Maintains a per-drone watchdog timer; if a drone does not send any
- *    STATUS within WATCHDOG_TIMEOUT_MS the Scheduler treats it as stuck:
- *      – Soft fault  → mission re-queued, drone reset to IDLE.
- *      – Hard fault  → drone permanently removed from the pool.
- *  • Handles HARD_FAULT STATUS from the drone directly (nozzle jammed).
- *  • Tracks the fault associated with each active mission so it can be
- *    forwarded in the CMD.
+ * Responsibilities:
+ * 1. Receive fire events from the FireIncidentSubsystem
+ * 2. Decide which drone(s) to dispatch
+ * 3. Send commands to the DroneSubsystem(s)
+ * 4. Receive and log drone status updates
+ * 5. Detect and handle drone faults via watchdog timer
  *
- * STATUS wire format (7 fields):
- *   STATUS:droneId:state:zoneId:posX:posY:faultType
- *
- * CMD wire format (4 fields):
- *   CMD:zoneId:severity:faultType
- *
- * FIRE wire format (5 fields):
- *   FIRE:zoneId:severity:eventType:faultType
+ * Iteration 4: fault forwarding, watchdog timer, and en-route interception added.
  */
 public class Scheduler implements Runnable {
 
@@ -44,42 +33,33 @@ public class Scheduler implements Runnable {
     private final ZoneManager  zoneManager;
 
     // Mission queue entries: "zoneId:severity:faultType"
-    private final Queue<String>             missionQueue         = new LinkedList<>();
+    private final Queue<String> missionQueue = new LinkedList<>();
     private final Map<Integer, Integer>     dronePorts           = new ConcurrentHashMap<>();
     private final Map<Integer, DroneState>  droneStates          = new ConcurrentHashMap<>();
     private final Map<Integer, Position>    dronePositions       = new ConcurrentHashMap<>();
     private final Map<Integer, Integer>     droneCompletedMissions = new ConcurrentHashMap<>();
 
-    /** Missions that are currently dispatched to a drone: droneId -> "zoneId:severity:faultType" */
-    private final Map<Integer, String>      activeMissions       = new ConcurrentHashMap<>();
+    // Active mission per drone: droneId -> "zoneId:severity:faultType"
+    private final Map<Integer, String> activeMissions = new ConcurrentHashMap<>();
 
-    /** Drones permanently disabled by a hard fault — never dispatched again. */
-    private final Set<Integer>              offlineDrones        = ConcurrentHashMap.newKeySet();
+    // Drones permanently disabled by a hard fault — never dispatched again
+    private final Set<Integer> offlineDrones = ConcurrentHashMap.newKeySet();
 
-    /**
-     * Drones that reported SOFT_FAULT and are self-recovering.
-     * Their next IDLE message means "reset complete", NOT "fire extinguished" —
-     * so we must re-queue their aborted mission and NOT decrement the fire counter.
-     */
-    private final Set<Integer>              recoveringDrones     = ConcurrentHashMap.newKeySet();
+    // Drones mid-recovery after SOFT_FAULT — their next IDLE is a reset, not a completion
+    private final Set<Integer> recoveringDrones = ConcurrentHashMap.newKeySet();
 
-    /** Remaining agent (litres) per drone — updated from STATUS messages. */
-    private final Map<Integer, Integer>     droneAgentLiters     = new ConcurrentHashMap<>();
+    // Remaining agent (litres) per drone — decremented on DROPPING_AGENT, reset on REFILLING
+    private final Map<Integer, Integer> droneAgentLiters = new ConcurrentHashMap<>();
 
-    // ── Watchdog infrastructure ───────────────────────────────────────────────
-    private final ScheduledExecutorService  watchdogExecutor     =
+    private final ScheduledExecutorService watchdogExecutor =
             Executors.newScheduledThreadPool(1, r -> {
                 Thread t = new Thread(r, "Watchdog");
                 t.setDaemon(true);
                 return t;
             });
 
-    /** Per-drone watchdog future; cancelled and rescheduled on every STATUS. */
+    // Per-drone watchdog future; cancelled and rescheduled on every STATUS received
     private final Map<Integer, ScheduledFuture<?>> watchdogFutures = new ConcurrentHashMap<>();
-
-    // =========================================================================
-    // Constructor
-    // =========================================================================
 
     public Scheduler(UDPHelper udp, int numDrones, ZoneManager zoneManager) {
         this.udp         = udp;
@@ -92,10 +72,6 @@ public class Scheduler implements Runnable {
             droneAgentLiters.put(i, DroneConfig.AGENT_CAPACITY_LITERS);
         }
     }
-
-    // =========================================================================
-    // Runnable – main receive loop
-    // =========================================================================
 
     @Override
     public void run() {
@@ -281,14 +257,7 @@ public class Scheduler implements Runnable {
         }
     }
 
-    // =========================================================================
-    // Fault handling helpers
-    // =========================================================================
-
-    /**
-     * Hard fault: drone is permanently offline.
-     * Re-queue its active mission (if any) so another drone can service it.
-     */
+    /** Hard fault: marks drone offline and re-queues its active mission. */
     private void handleHardFault(int droneId, int zoneId, FaultType fault) {
         offlineDrones.add(droneId);
         cancelWatchdog(droneId);
@@ -326,9 +295,7 @@ public class Scheduler implements Runnable {
         tryDispatch();
     }
 
-    /**
-     * If the drone had an active mission when it faulted, put it back on the queue.
-     */
+    /** Re-queues the drone's active mission with fault cleared so it does not cascade. */
     private void requeueActiveMission(int droneId) {
         String mission = activeMissions.remove(droneId);
         if (mission != null) {
@@ -346,14 +313,7 @@ public class Scheduler implements Runnable {
         }
     }
 
-    // =========================================================================
-    // Watchdog management
-    // =========================================================================
-
-    /**
-     * Cancel any existing watchdog for droneId and schedule a fresh one —
-     * unless the drone is now IDLE or in a terminal state (hard fault, offline).
-     */
+    /** Resets the watchdog timer for a drone, or cancels it if the drone is now idle or offline. */
     private void resetWatchdog(int droneId, DroneState newState) {
         cancelWatchdog(droneId);
 
@@ -377,20 +337,7 @@ public class Scheduler implements Runnable {
         if (existing != null) existing.cancel(false);
     }
 
-    // =========================================================================
-    // Dispatch
-    // =========================================================================
-
-    /**
-     * Called when a drone reports RETURNING.  Checks every queued mission to see
-     * if the drone passes within INTERCEPT_RADIUS_M of the fire zone AND has
-     * enough agent left to service it.  If so, the mission is pulled from the
-     * queue and sent directly to the returning drone as a new CMD, avoiding an
-     * unnecessary trip back to base.
-     *
-     * Per spec (I3): "if a drone on the way to service zone 2 must pass through
-     * zone 1, then zone 1 must be serviced instead."
-     */
+    /** Checks if a returning drone can intercept a queued fire en route to base. */
     private static final double INTERCEPT_RADIUS_M = 400.0;
 
     private void tryInterceptEnRoute(int droneId, double curX, double curY) {
@@ -472,9 +419,7 @@ public class Scheduler implements Runnable {
         }
     }
 
-    /**
-     * Finds the closest idle drone and dispatches it to the next queued mission.
-     */
+    /** Finds an idle drone and dispatches it to the next queued mission. */
     private void tryDispatch() {
         synchronized (missionQueue) {
             if (missionQueue.isEmpty()) return;

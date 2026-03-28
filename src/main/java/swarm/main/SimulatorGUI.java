@@ -20,7 +20,6 @@ public class SimulatorGUI {
     // How often the map repaints AND how often drone positions step forward.
     private static final int TICK_MS = 100;
 
-    // ── State colours ─────────────────────────────────────────────────────────
     private static final Map<DroneState, Color> STATE_COLORS = new HashMap<>();
     static {
         STATE_COLORS.put(DroneState.IDLE,           new Color(160, 160, 160));
@@ -33,14 +32,12 @@ public class SimulatorGUI {
         STATE_COLORS.put(DroneState.HARD_FAULT,      new Color(220,  30,  30));
     }
 
-    // ── Swing components ──────────────────────────────────────────────────────
     private final JTextArea     logArea       = new JTextArea();
     private final JPanel        dronePanel    = new JPanel();
     private final JLabel        incidentLabel = new JLabel("Active Incidents: 0");
     private final AtomicInteger activeIncidents = new AtomicInteger(0);
     private MapCanvas mapCanvas;
 
-    // ── Shared data ───────────────────────────────────────────────────────────
     private final ZoneManager zoneManager;
     private final Map<Integer, String>           zoneFireSeverity  = new ConcurrentHashMap<>();
     private final Map<Integer, DroneMarker>      droneMarkers      = new ConcurrentHashMap<>();
@@ -62,7 +59,7 @@ public class SimulatorGUI {
             renderY = targetY = y;
         }
 
-        /** Called every TICK_MS on the EDT — advances one step toward target. */
+        // Advances renderX/Y one step toward target; called every TICK_MS by the Swing timer
         void tick() {
             if (stepX == 0 && stepY == 0) return;
             double remX = targetX - renderX;
@@ -78,9 +75,7 @@ public class SimulatorGUI {
             }
         }
 
-        /**
-         * Assign a new target and spread the movement over {@code travelTicks} ticks.
-         */
+        // Sets a new destination and computes the per-tick step size
         void moveTo(double tx, double ty, int travelTicks) {
             targetX = tx;
             targetY = ty;
@@ -93,7 +88,7 @@ public class SimulatorGUI {
             }
         }
 
-        /** Instant teleport (e.g. back to base after refill). */
+        // Teleports the diamond instantly with no animation
         void snapTo(double x, double y) {
             renderX = targetX = x;
             renderY = targetY = y;
@@ -121,7 +116,6 @@ public class SimulatorGUI {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLayout(new BorderLayout(4, 4));
 
-        // ── North: system monitor (drone rows + legend side by side) ──────
         JPanel statsPanel = new JPanel(new BorderLayout(4, 0));
         statsPanel.setBorder(BorderFactory.createTitledBorder("System Monitor"));
         statsPanel.setPreferredSize(new Dimension(0, 155));
@@ -143,14 +137,12 @@ public class SimulatorGUI {
 
         frame.add(statsPanel, BorderLayout.NORTH);
 
-        // ── Centre: live map ──────────────────────────────────────────────
         mapCanvas = new MapCanvas(zoneManager);
         JPanel mapWrapper = new JPanel(new BorderLayout());
         mapWrapper.setBorder(BorderFactory.createTitledBorder("Zone Map"));
         mapWrapper.add(mapCanvas, BorderLayout.CENTER);
         frame.add(mapWrapper, BorderLayout.CENTER);
 
-        // ── East: mission log — fixed width so it never eats legend space ─
         logArea.setEditable(false);
         logArea.setFont(new Font("Monospaced", Font.PLAIN, 11));
         JScrollPane logScroll = new JScrollPane(logArea);
@@ -165,7 +157,6 @@ public class SimulatorGUI {
         logWrapper.add(logScroll, BorderLayout.CENTER);
         frame.add(logWrapper, BorderLayout.EAST);
 
-        // ── South: start button ───────────────────────────────────────────
         JButton startButton = new JButton("Start Simulation");
         startButton.addActionListener(e -> {
             startButton.setEnabled(false);
@@ -373,23 +364,7 @@ public class SimulatorGUI {
         }
     }
 
-    /**
-     * Primary update called by the Scheduler on every STATUS message.
-     *
-     * When the drone is EN_ROUTE or RETURNING the Scheduler knows both the
-     * current position and the destination — pass them together so the GUI can
-     * animate the diamond smoothly between the two points.
-     *
-     * @param droneId     drone identifier
-     * @param state       new logical state
-     * @param zoneId      associated zone (0 = none / IDLE)
-     * @param fault       active fault (NONE if healthy)
-     * @param currentX    world X where the drone currently is
-     * @param currentY    world Y where the drone currently is
-     * @param destX       world X the drone is heading to (same as current if not moving)
-     * @param destY       world Y the drone is heading to
-     * @param travelMs    real-time milliseconds the leg takes (used to compute step size)
-     */
+    /** Updates drone state and kicks off smooth position interpolation toward the destination. */
     public void updateDroneMovement(int droneId, DroneState state, int zoneId,
                                     FaultType fault,
                                     double currentX, double currentY,
@@ -421,9 +396,8 @@ public class SimulatorGUI {
         if (rs != null) rs.snapTo(0, 0);
     }
 
-    // ── Backward-compatible overloads ─────────────────────────────────────────
 
-    /** Legacy: update state + GUI marker without changing the interpolated position. */
+    /** Updates drone state and system monitor marker without changing the map position. */
     public void updateDroneInfo(int droneId, DroneState state, int zoneId, FaultType fault) {
         DroneRenderState rs = droneRenderStates.computeIfAbsent(droneId,
                 id -> new DroneRenderState(0, 0));
@@ -436,11 +410,7 @@ public class SimulatorGUI {
         updateDroneInfo(droneId, state, zoneId, FaultType.NONE);
     }
 
-    /**
-     * Legacy: update the drone's position on the map.
-     * If the drone is currently animating (stepX/Y != 0) this updates the
-     * target only, so the diamond glides there instead of teleporting.
-     */
+    /** Updates the drone's map position; glides if already animating, snaps if stationary. */
     public void updateDronePosition(int droneId, double x, double y) {
         DroneRenderState rs = droneRenderStates.computeIfAbsent(droneId,
                 id -> new DroneRenderState(x, y));
