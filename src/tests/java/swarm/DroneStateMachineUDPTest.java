@@ -176,8 +176,8 @@ public class DroneStateMachineUDPTest {
     public void testStatusPacketHasSixParts() throws Exception {
         sendCmd(1, Severity.LOW);
         String status = receiveStatus();
-        assertEquals(6, status.split(":").length,
-                "STATUS should have 6 parts: STATUS:id:state:zone:posX:posY — got: " + status);
+        assertEquals(7, status.split(":").length,
+                "STATUS should have 7 parts: STATUS:id:state:zone:posX:posY — got: " + status);
         collectStates(5);
     }
 
