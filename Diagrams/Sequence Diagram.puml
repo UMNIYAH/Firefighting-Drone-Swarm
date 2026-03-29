@@ -1,55 +1,44 @@
 @startuml
-title Firefighting Drone Swarm - Iteration 2 - Sequence Diagram (Threads + Message Passing)
+title Iteration 4 - Swarm Dispatch & Fault Recovery
 
-actor User
+participant "FireIncident" as FIS
+participant "Scheduler\n(Port 5000)" as SCH
+participant "SimulatorGUI" as GUI
+participant "Drone 1" as D1
+participant "Drone 2" as D2
 
-participant "SystemMain (main thread)" as MAIN
-participant "FireIncidentSubsystem (thread)" as FIS
-participant "Scheduler (thread)" as SCH
-participant "DroneSubsystem (thread)" as DRN
+== Normal Dispatch ==
+FIS -[#blue]> SCH : UDP [FIRE:3:HIGH:NONE]
+SCH -[#blue]> D1 : UDP [CMD:3:HIGH:NONE]
+D1 -[#blue]> SCH : UDP [STATUS:1:EN_ROUTE:3:150:200:NONE]
+SCH -> GUI : updateDronePosition(1)
 
-participant "MessageBus" as BUS
-participant "fireEvents queue" as Q_fire
-participant "droneCommands queue" as Q_cmd
-participant "droneStatuses queue" as Q_status
+== Hard Fault: Nozzle Jammed ==
+FIS -[#blue]> SCH : UDP [FIRE:5:HIGH:NOZZLE_JAMMED]
+SCH -[#blue]> D1 : UDP [CMD:5:HIGH:NOZZLE_JAMMED]
+D1 -[#blue]> SCH : UDP [STATUS:1:HARD_FAULT:5:300:400:NOZZLE_JAMMED]
 
-== Startup ==
-User -> MAIN : run main()
-MAIN -> BUS : new MessageBus(50)
-MAIN -> MAIN : new ZoneManager("sample_zone_file.csv")
-MAIN -> FIS : start Thread(FireIncidentSubsystem)
-MAIN -> SCH : start Thread(Scheduler)
-MAIN -> DRN : start Thread(DroneSubsystem)
-
-note right of FIS
-Subsystem threads run concurrently.
-All communication happens via MessageBus queues.
+SCH -> GUI : markDroneFault(1, NOZZLE_JAMMED)
+note right of SCH
+  Drone 1 marked permanently offline.
+  Mission 5 stripped of fault and re-queued.
 end note
 
-== FireIncident produces events ==
-FIS -> Q_fire : put(FireEvent)
+SCH -[#blue]> D2 : UDP [CMD:5:HIGH:NONE]
 
-== Scheduler consumes event and dispatches ==
-SCH -> Q_fire : take()
-SCH -> SCH : enqueue missionQueue
-SCH -> Q_cmd : put(DroneCommand)
+== Soft Fault: Packet Loss (Watchdog) ==
+FIS -[#blue]> SCH : UDP [FIRE:4:LOW:PACKET_LOSS]
+SCH -[#blue]> D2 : UDP [CMD:4:LOW:PACKET_LOSS]
 
-== Drone executes mission (state machine) ==
-DRN -> Q_cmd : take()
-DRN -> Q_status : put(DroneStatus: IDLE)
-DRN -> Q_status : put(DroneStatus: EN_ROUTE)
-DRN -> Q_status : put(DroneStatus: DROPPING_AGENT)
-DRN -> Q_status : put(DroneStatus: RETURNING)
-DRN -> Q_status : put(DroneStatus: REFILLING)
-DRN -> Q_status : put(DroneStatus: IDLE)
+note right of D2 : Drone flies but drops STATUS packets
+... 30 seconds elapse with no UDP STATUS ...
 
-== Scheduler reacts to drone availability ==
-SCH -> Q_status : take()
-alt status.state == IDLE
-  SCH -> SCH : droneBusy = false
-  SCH -> SCH : dispatchDrone() if missionQueue not empty
-else other status
-  SCH -> SCH : log / ignore for dispatch
-end
+SCH -> GUI : markDroneFault(2, PACKET_LOSS)
+note right of SCH
+  Watchdog triggers.
+  Mission 4 stripped of fault and re-queued.
+end note
+
+SCH -[#blue]> D1 : UDP [CMD:4:LOW:NONE]
 
 @enduml

@@ -1,28 +1,48 @@
 @startuml
-title Scheduler State Machine
+title Scheduler State Machine (Iteration 4 - Fault Tolerance)
 
-[*] --> WAITING
+[*] --> LISTENING
 
-state WAITING {
+state LISTENING {
 }
-WAITING : droneBusy = false OR missionQueue empty
+LISTENING : Background: Watchdog Timer running (30s limit)
+LISTENING : Listening on UDP port 5000
 
-WAITING --> DISPATCHING : (missionQueue not empty) AND (droneBusy == false)
+LISTENING --> ENQUEUING_MISSION : receive(FIRE)
+LISTENING --> PROCESSING_STATUS : receive(STATUS)
+LISTENING --> HANDLING_TIMEOUT : Watchdog triggers (>30s without check-in)
+
+state ENQUEUING_MISSION {
+}
+ENQUEUING_MISSION : missionQueue.add(FireEvent)
+ENQUEUING_MISSION --> DISPATCHING : tryDispatch()
+
+state PROCESSING_STATUS {
+}
+PROCESSING_STATUS : Update droneStates & dronePositions
+PROCESSING_STATUS --> FAULT_RECOVERY : if fault == NOZZLE_JAMMED or DRONE_STUCK
+PROCESSING_STATUS --> DISPATCHING : if state == IDLE (drone available)
+PROCESSING_STATUS --> LISTENING : otherwise (EN_ROUTE, DROPPING, etc.)
+
+state HANDLING_TIMEOUT {
+}
+HANDLING_TIMEOUT : Log PACKET_LOSS warning
+HANDLING_TIMEOUT : droneStates.put(droneId, SOFT_FAULT)
+HANDLING_TIMEOUT : dispatchTimes.remove(droneId)
+HANDLING_TIMEOUT --> FAULT_RECOVERY : rescue missing mission
+
+state FAULT_RECOVERY {
+}
+FAULT_RECOVERY : if NOZZLE_JAMMED -> add to offlineDrones
+FAULT_RECOVERY : Strip fault constraint to NONE
+FAULT_RECOVERY : Re-queue mission to front of missionQueue
+FAULT_RECOVERY --> DISPATCHING : tryDispatch()
 
 state DISPATCHING {
 }
-DISPATCHING : nextMission = missionQueue.poll()
-DISPATCHING : droneBusy = true
-DISPATCHING : put(DroneCommand)
-DISPATCHING --> BUSY : command sent
-
-state BUSY {
-}
-BUSY : droneBusy = true
-
-BUSY --> BUSY : receive FireEvent / enqueue missionQueue
-BUSY --> WAITING : receive DroneStatus(IDLE)\n(drone available)
-
-WAITING --> WAITING : receive FireEvent / enqueue missionQueue
-
+DISPATCHING : Find best IDLE drone not in offlineDrones
+DISPATCHING : udp.send(CMD:zoneId:severity:faultType)
+DISPATCHING : dispatchTimes.put(droneId, currentTime)
+DISPATCHING --> LISTENING : command sent successfully
+DISPATCHING --> LISTENING : [No drones available]
 @enduml

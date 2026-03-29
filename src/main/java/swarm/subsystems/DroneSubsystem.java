@@ -16,10 +16,18 @@ import swarm.model.Position;
  * 1. Receives commands from the Scheduler
  * 2. Simulates drone flight, agent drop, and return
  * 3. Reports status back to the Scheduler
+ * 4. Injects faults (DRONE_STUCK, NOZZLE_JAMMED, PACKET_LOSS) based on CMD
  *
- * Iteration 3: each drone runs as a separate process with its own port.
+ * Iteration 4: fault injection added via fault field in CMD message.
  */
 public class DroneSubsystem implements Runnable {
+
+    // Reset delay for a stuck drone before self-recovery
+    private static final long STUCK_RESET_MS = 3_000;
+
+    // Number of STATUS messages silently dropped for PACKET_LOSS
+    private static final int PACKET_LOSS_DROP_COUNT = 2;
+
     private final UDPHelper udp;
     private final int droneId;
     private final int port;
@@ -27,12 +35,15 @@ public class DroneSubsystem implements Runnable {
     private int currentAgent;
     private Position currentPosition;
 
+    // Set to true on NOZZLE_JAMMED — stops the mission loop permanently
+    private volatile boolean hardFaulted = false;
+
     public DroneSubsystem(UDPHelper udp, int droneId, int port, ZoneManager zoneManager) {
-        this.udp = udp;
-        this.droneId = droneId;
-        this.port = port;
-        this.zoneManager = zoneManager;
-        this.currentAgent = DroneConfig.AGENT_CAPACITY_LITERS;
+        this.udp           = udp;
+        this.droneId       = droneId;
+        this.port          = port;
+        this.zoneManager   = zoneManager;
+        this.currentAgent  = DroneConfig.AGENT_CAPACITY_LITERS;
         this.currentPosition = DroneConfig.BASE_POSITION;
     }
 
@@ -43,82 +54,149 @@ public class DroneSubsystem implements Runnable {
     }
 
     private void processMissions() {
-        while (true) {
+        while (!hardFaulted) {
             try {
                 String message = udp.receive();
                 String[] parts = message.split(":");
 
-                if (parts[0].equals("CMD")) {
-                    int zoneId = Integer.parseInt(parts[1]);
-                    Severity severity = Severity.valueOf(parts[2]);
+                if (!parts[0].equals("CMD")) continue;
 
-                    Position target = zoneManager.getZoneCenter(zoneId);
-                    if (target == null) {
-                        System.err.println("[Drone " + droneId + "] Zone " + zoneId + " not found.");
-                        continue;
-                    }
+                // CMD:zoneId:severity:faultType
+                int      zoneId   = Integer.parseInt(parts[1]);
+                Severity severity  = Severity.valueOf(parts[2]);
+                FaultType fault   = (parts.length >= 4)
+                        ? FaultType.valueOf(parts[3])
+                        : FaultType.NONE;
 
-                    // EN_ROUTE
-                    reportStatus(DroneState.EN_ROUTE, zoneId, FaultType.NONE);
-                    long flightTime = DroneConfig.travelTimeMillis(currentPosition.distanceTo(target));
-                    Thread.sleep(flightTime / 10);
-                    currentPosition = target;
-
-                    // ARRIVED
-                    reportStatus(DroneState.ARRIVED, zoneId, FaultType.NONE);
-
-                    // DROPPING_AGENT
-                    reportStatus(DroneState.DROPPING_AGENT, zoneId, FaultType.NONE);
-                    long dropTime = DroneConfig.dropTimeMillis(severity.litersRequired())
-                            + DroneConfig.doorOpenCloseMillis();
-                    Thread.sleep(dropTime / 10);
-                    currentAgent -= severity.litersRequired();
-
-                    // RETURNING
-                    reportStatus(DroneState.RETURNING, zoneId, FaultType.NONE);
-                    long returnTime = DroneConfig.travelTimeMillis(currentPosition.distanceTo(DroneConfig.BASE_POSITION));
-                    Thread.sleep(returnTime / 10);
-
-                    // REFILLING
-                    currentPosition = DroneConfig.BASE_POSITION;
-                    currentAgent = DroneConfig.AGENT_CAPACITY_LITERS;
-                    reportStatus(DroneState.REFILLING, zoneId, FaultType.NONE);
-                    Thread.sleep(200);
-
-                    // IDLE
-                    reportStatus(DroneState.IDLE, null, FaultType.NONE);
+                Position target = zoneManager.getZoneCenter(zoneId);
+                if (target == null) {
+                    System.err.println("[Drone " + droneId + "] Zone " + zoneId + " not found, skipping.");
+                    continue;
                 }
+
+                executeMission(zoneId, severity, target, fault);
+
             } catch (Exception e) {
-                System.err.println("[Drone " + droneId + "] Error: " + e.getMessage());
+                if (!hardFaulted) {
+                    System.err.println("[Drone " + droneId + "] Error in mission loop: " + e.getMessage());
+                }
             }
+        }
+        System.out.println("[Drone " + droneId + "] Mission loop terminated (hard fault).");
+    }
+
+    private void executeMission(int zoneId, Severity severity, Position target, FaultType fault)
+            throws InterruptedException {
+
+        // ── EN_ROUTE ──────────────────────────────────────────────────────────
+        reportStatus(DroneState.EN_ROUTE, zoneId, FaultType.NONE);
+        long flightTime = DroneConfig.travelTimeMillis(currentPosition.distanceTo(target));
+
+        // DRONE_STUCK: freeze mid-flight, report soft fault, then self-recover
+        if (fault == FaultType.DRONE_STUCK) {
+            Thread.sleep(flightTime / 20);     // fly partway
+            reportStatus(DroneState.SOFT_FAULT, zoneId, FaultType.DRONE_STUCK);
+            System.out.println("[Drone " + droneId + "] STUCK mid-flight on zone " + zoneId
+                    + " — resetting in " + STUCK_RESET_MS + " ms");
+            Thread.sleep(STUCK_RESET_MS);
+
+            // Self-recovery: return to idle so Scheduler can reassign
+            currentPosition = DroneConfig.BASE_POSITION;
+            currentAgent    = DroneConfig.AGENT_CAPACITY_LITERS;
+            reportStatus(DroneState.IDLE, null, FaultType.NONE);
+            return;   // mission aborted; Scheduler will requeue
+        }
+
+        Thread.sleep(flightTime / 10);
+        currentPosition = target;
+
+        // ── ARRIVED ───────────────────────────────────────────────────────────
+        reportStatus(DroneState.ARRIVED, zoneId, FaultType.NONE);
+
+        // PACKET_LOSS: drop the next two outbound STATUS messages silently
+        int packetsToSkip = (fault == FaultType.PACKET_LOSS) ? PACKET_LOSS_DROP_COUNT : 0;
+
+        // ── DROPPING_AGENT ────────────────────────────────────────────────────
+        // NOZZLE_JAMMED: hard fault — bay doors cannot open
+        if (fault == FaultType.NOZZLE_JAMMED) {
+            hardFaulted = true;
+            reportStatus(DroneState.HARD_FAULT, zoneId, FaultType.NOZZLE_JAMMED);
+            System.out.println("[Drone " + droneId + "] NOZZLE JAMMED on zone " + zoneId
+                    + " — drone permanently offline");
+            return;   // exits processMissions loop via hardFaulted flag
+        }
+
+        reportStatusMaybeDropped(DroneState.DROPPING_AGENT, zoneId, FaultType.NONE, packetsToSkip > 0);
+        if (packetsToSkip > 0) packetsToSkip--;
+
+        long dropTime = DroneConfig.dropTimeMillis(severity.litersRequired())
+                + DroneConfig.doorOpenCloseMillis();
+        Thread.sleep(dropTime / 10);
+        currentAgent -= severity.litersRequired();
+        if (currentAgent < 0) currentAgent = 0;
+
+        // ── RETURNING ─────────────────────────────────────────────────────────
+        reportStatusMaybeDropped(DroneState.RETURNING, zoneId, FaultType.NONE, packetsToSkip > 0);
+        if (packetsToSkip > 0) packetsToSkip--;
+
+        long returnTime = DroneConfig.travelTimeMillis(
+                currentPosition.distanceTo(DroneConfig.BASE_POSITION));
+        Thread.sleep(returnTime / 10);
+
+        // ── REFILLING ─────────────────────────────────────────────────────────
+        currentPosition = DroneConfig.BASE_POSITION;
+        currentAgent    = DroneConfig.AGENT_CAPACITY_LITERS;
+        reportStatus(DroneState.REFILLING, zoneId, FaultType.NONE);
+        Thread.sleep(200);
+
+        // ── IDLE ──────────────────────────────────────────────────────────────
+        reportStatus(DroneState.IDLE, null, FaultType.NONE);
+    }
+
+    /** Sends a STATUS message to the Scheduler. Format: STATUS:droneId:state:zoneId:posX:posY:faultType */
+    private void reportStatus(DroneState state, Integer zoneId, FaultType faultType) {
+        try {
+            String zoneIdStr = (zoneId != null) ? String.valueOf(zoneId) : "0";
+            String msg = "STATUS:" + droneId
+                    + ":" + state.name()
+                    + ":" + zoneIdStr
+                    + ":" + currentPosition.x()
+                    + ":" + currentPosition.y()
+                    + ":" + faultType.name();
+            udp.send(msg, 5000);
+
+            if (SimulatorGUI.instance != null) {
+                SimulatorGUI.instance.log("[Drone " + droneId + "] " + state
+                        + (zoneId != null ? " (Zone " + zoneId + ")" : "")
+                        + (faultType != FaultType.NONE ? " [" + faultType + "]" : ""));
+            }
+        } catch (Exception e) {
+            System.err.println("[Drone " + droneId + "] Failed to send status: " + e.getMessage());
         }
     }
 
-    private void reportStatus(DroneState state, Integer zoneId, FaultType faultType) {
-        try {
-            String zoneIdString = (zoneId != null) ? String.valueOf(zoneId) : "0";
-            // Append position and fault type so Scheduler knows drone state
-            String statusMessage = "STATUS:" + droneId + ":" + state.name() + ":" + zoneIdString
-                    + ":" + currentPosition.x() + ":" + currentPosition.y()
-                    + ":" + faultType.name();
-            udp.send(statusMessage, 5000);
-
+    /** Like reportStatus but silently skips the UDP send when drop is true (PACKET_LOSS). */
+    private void reportStatusMaybeDropped(DroneState state, Integer zoneId,
+                                          FaultType faultType, boolean drop) {
+        if (drop) {
+            System.out.println("[Drone " + droneId + "] [PACKET_LOSS] dropping STATUS:" + state);
+            // Log locally but do NOT send UDP
             if (SimulatorGUI.instance != null) {
-                SimulatorGUI.instance.log("[Drone " + droneId + "] is now " + state +
-                        (zoneId != null ? " (Zone " + zoneId + ")" : ""));
+                SimulatorGUI.instance.log("[Drone " + droneId + "] [PACKET_LOSS] dropped STATUS:"
+                        + state + " (Zone " + zoneId + ")");
             }
-        } catch (Exception e) {
-            System.err.println("[Drone " + droneId + "] Failed to send status.");
+        } else {
+            reportStatus(state, zoneId, faultType);
         }
     }
 
     public static void main(String[] args) {
         try {
             int droneId = args.length > 0 ? Integer.parseInt(args[0]) : 1;
-            int port = 6000 + droneId;
+            int port    = 6000 + droneId;
 
-            ZoneManager zm = new ZoneManager("sample_zone_file.csv");
-            UDPHelper udp = new UDPHelper(port);
+            ZoneManager zm  = new ZoneManager("sample_zone_file.csv");
+            UDPHelper   udp = new UDPHelper(port);
             new DroneSubsystem(udp, droneId, port, zm).run();
         } catch (Exception e) {
             System.err.println("Failed to start Drone " + (args.length > 0 ? args[0] : "1"));

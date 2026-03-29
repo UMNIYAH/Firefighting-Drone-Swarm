@@ -1,0 +1,30 @@
+@startuml
+title Timing Diagram: Soft Fault (DRONE_STUCK) Recovery
+
+robust "Drone 1 State" as D1
+concise "Scheduler" as SCH
+
+@0
+D1 is IDLE
+SCH is LISTENING
+
+@500
+SCH is DISPATCHING
+SCH -> D1 : UDP [CMD:1:MODERATE:DRONE_STUCK]
+
+@1000
+D1 is EN_ROUTE
+SCH is LISTENING
+
+@3000
+D1 is SOFT_FAULT : Freezes mid-flight
+D1 -> SCH : UDP [STATUS:SOFT_FAULT:DRONE_STUCK]
+SCH is FAULT_RECOVERY : Strips fault & Re-queues mission
+
+@3500
+SCH is LISTENING
+
+@6000
+D1 is IDLE : 3000ms self-recovery complete
+D1 -> SCH : UDP [STATUS:IDLE:NONE]
+@enduml
