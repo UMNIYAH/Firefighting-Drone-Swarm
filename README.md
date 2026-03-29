@@ -35,6 +35,26 @@ The project follows an iterative and incremental development process. GitHub Iss
 #### Vincent
 - Testing
 
+### Team Contribution - Iteration 4
+#### Umniyah
+- Defined fault types and extended the data model
+- Extended input file format to support fault injection
+- Submitted work to deliverables directories
+- Updated README
+- Updated UML diagrams
+#### Armin
+- Rebuilt SimulatorGUI with a custom-painted MapCanvas replacing the old grid layout
+- Added smooth interpolated drone movement with color-coded diamond markers
+- Added state color legend and timestamped log entries
+- Added white background behind drone text for readability
+#### Liam
+- Implemented validation testing for fault handling
+#### Vincent
+- Implemented fault injection in DroneSubsystem (DRONE_STUCK, NOZZLE_JAMMED, PACKET_LOSS)
+- Added watchdog timer, hard/soft fault handling, and mission re-queuing in Scheduler
+- Added en-route interception logic for returning drones
+- Updated zone CSV to full 3×3 grid (9 zones)
+
 ---
 ## Setup Instructions
 
@@ -201,8 +221,7 @@ Firefighting-Drone-Swarm/
 └── SYSC3303A W26 Project V2.1.pdf # Official project specification
 ```
 ---
-<<<<<<< Updated upstream
-=======
+
 ## Documentation and Submissions
 
 Deliverables will be added as the project progresses.
@@ -214,4 +233,3 @@ Deliverables will be added as the project progresses.
 * [Iteration 4](/I4)
 * [Iteration 5](/I5)
 * [Final Report](/Final%20Project%20Submission)
->>>>>>> Stashed changes
