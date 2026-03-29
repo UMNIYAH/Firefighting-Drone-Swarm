@@ -5,47 +5,24 @@ hide circle
 ' Packages
 package "swarm.infra" {
   class DroneConfig <<final>> {
-    {static} -TEST_MODE: boolean
-    {static} +CRUISE_SPEED_MPS: double
-    {static} +TAKEOFF_ACCEL_MPS2: double
-    {static} +LANDING_DECEL_MPS2: double
-    {static} +TAKEOFF_TIME_S: double
-    {static} +TAKEOFF_DIST_M: double
-    {static} +LANDING_TIME_S: double
-    {static} +LANDING_DIST_M: double
-    {static} +DOOR_OPEN_TIME_S: double
-    {static} +DOOR_CLOSE_TIME_S: double
-    {static} +DROP_RATE_LPS: double
     {static} +AGENT_CAPACITY_LITERS: int
     {static} +BASE_POSITION: Position
-    {static} +enableTestMode(): void
-    {static} +disableTestMode(): void
     {static} +travelTimeMillis(distanceMeters: double): long
     {static} +dropTimeMillis(litersRequired: int): long
     {static} +doorOpenCloseMillis(): long
   }
 
-  class MessageBus {
-    +fireEvents: MonitorQueue<FireEvent>
-    +droneCommands: MonitorQueue<DroneCommand>
-    +droneStatuses: MonitorQueue<DroneStatus>
-    +MessageBus(capacity: int)
-  }
-
-  class MonitorQueue<T> {
-    -buffer: Deque<T>
-    -capacity: int
-    +MonitorQueue(capacity: int)
-    +put(item: T): void
-    +take(): T
-    +size(): int
+  class UDPHelper {
+    -socket: DatagramSocket
+    -port: int
+    +UDPHelper(port: int)
+    +send(message: String, destPort: int): void
+    +receive(): String
   }
 
   class ZoneManager {
     -zones: Map<Integer, Zone>
     +ZoneManager(zoneFilePath: String)
-    -loadZones(path: String): void
-    -parsePosition(token: String): Position
     +getZone(id: int): Zone
     +getZoneCenter(id: int): Position
   }
@@ -53,25 +30,43 @@ package "swarm.infra" {
 
 package "swarm.main" {
   class SimulatorGUI {
-    -logArea: JTextArea
-    -bus: MessageBus
+    +{static} instance: SimulatorGUI
     -zoneManager: ZoneManager
     +SimulatorGUI()
-    +log(message: String): void
-    -startSimulation(): void
-    +main(args: String[]): void
+    +log(msg: String): void
+    +updateDroneMovement(...): void
+    +updateDroneInfo(...): void
+    +markDroneFault(droneId: int, fault: FaultType): void
+    +setZoneOnFire(zoneId: int, severity: String): void
+    +clearZone(zoneId: int): void
   }
 
-  class SystemMain {
+  class MapCanvas <<inner>> {
+    +paintComponent(g: Graphics): void
+  }
+
+  class DroneRenderState <<inner>> {
+    +state: DroneState
+    +fault: FaultType
+    +tick(): void
+  }
+
+  class DroneMarker <<inner>> {
+    +update(stateText: String, color: Color): void
+  }
+
+  class Launcher {
     +main(args: String[]): void
   }
 }
 
 package "swarm.messages" {
-  class DroneCommand <<record>> {
-    +droneId: int
-    +zoneId: int
-    +severity: Severity
+  enum FaultType {
+    NONE
+    DRONE_STUCK
+    NOZZLE_JAMMED
+    PACKET_LOSS
+    +isHardFault(): boolean
   }
 
   enum DroneState {
@@ -81,19 +76,12 @@ package "swarm.messages" {
     DROPPING_AGENT
     RETURNING
     REFILLING
-    FAULT
-  }
-
-  class DroneStatus <<record>> {
-    +droneId: int
-    +state: DroneState
-    +currentZoneId: Integer
-    +remainingAgentLiters: int
+    SOFT_FAULT
+    HARD_FAULT
   }
 
   enum EventType {
     FIRE_DETECTED
-    DRONE_REQUEST
   }
 
   class FireEvent <<record>> {
@@ -101,6 +89,7 @@ package "swarm.messages" {
     +zoneId: int
     +type: EventType
     +severity: Severity
+    +fault: FaultType
     +timestamp(): Instant
   }
 
@@ -128,80 +117,68 @@ package "swarm.model" {
 
 package "swarm.subsystems" {
   class DroneSubsystem {
-    -bus: MessageBus
+    -udp: UDPHelper
     -droneId: int
     -zoneManager: ZoneManager
-    -currentAgent: int
-    -currentPosition: Position
-    +DroneSubsystem(bus: MessageBus, droneId: int, zoneManager: ZoneManager)
+    -hardFaulted: boolean
     +run(): void
     -processMissions(): void
-    -reportStatus(state: DroneState, zoneId: Integer): void
+    -executeMission(...): void
+    -reportStatus(...): void
   }
 
   class FireIncidentSubsystem {
-    -bus: MessageBus
+    -udp: UDPHelper
     -inputFileName: String
-    +FireIncidentSubsystem(bus: MessageBus, inputFileName: String)
     +run(): void
-    -runEventReader(): void
-    -runStatusListener(): void
-    -readIncidents(inputFileName: String): void
+    -readIncidents(): void
   }
 
   class Scheduler {
-    -bus: MessageBus
+    -udp: UDPHelper
     -missionQueue: Queue<FireEvent>
-    -droneBusy: boolean
-    -droneId: int
-    +Scheduler(bus: MessageBus)
+    -dispatchTimes: Map<Integer, Long>
+    -offlineDrones: Set<Integer>
     +run(): void
-    -handleFireEvents(): void
-    -dispatchDrone(): void
-    -handleDroneStatuses(): void
+    -handleMessage(msg: String): void
+    -tryDispatch(): void
+    -startWatchdogTimer(): void
   }
 }
 
-' Dependencies
-SystemMain --> MessageBus
-SystemMain --> ZoneManager
-SystemMain --> FireIncidentSubsystem
-SystemMain --> Scheduler
-SystemMain --> DroneSubsystem
+' Dependencies & Relationships
+Launcher --> UDPHelper
+Launcher --> ZoneManager
+Launcher --> FireIncidentSubsystem
+Launcher --> Scheduler
+Launcher --> DroneSubsystem
+Launcher --> SimulatorGUI
 
-SimulatorGUI --> MessageBus
-SimulatorGUI --> ZoneManager
-SimulatorGUI --> FireIncidentSubsystem
-SimulatorGUI --> Scheduler
-SimulatorGUI --> DroneSubsystem
+' Inner Classes
+SimulatorGUI +-- MapCanvas
+SimulatorGUI +-- DroneRenderState
+SimulatorGUI +-- DroneMarker
 
-' MessageBus owns the queues
-MessageBus o-- "1" MonitorQueue : fireEvents
-MessageBus o-- "1" MonitorQueue : droneCommands
-MessageBus o-- "1" MonitorQueue : droneStatuses
+' Subsystems use UDP for communication
+FireIncidentSubsystem --> UDPHelper
+Scheduler --> UDPHelper
+DroneSubsystem --> UDPHelper
 
-' Subsystems use the bus
-FireIncidentSubsystem --> MessageBus
-Scheduler --> MessageBus
-DroneSubsystem --> MessageBus
-
-' DroneSubsystem uses zone + config + position
+' Domain Models
 DroneSubsystem --> ZoneManager
 DroneSubsystem ..> DroneConfig
 DroneSubsystem ..> Position
+Scheduler ..> Position
 
-' Zone management model
 ZoneManager o-- "0..*" Zone
-ZoneManager ..> Position
 Zone o-- "2" Position
 
-' Messages dependencies
-DroneCommand --> Severity
-DroneStatus --> DroneState
-DroneStatus --> "0..1" Integer
 FireEvent --> EventType
 FireEvent --> Severity
+FireEvent --> FaultType
 
-DroneConfig ..> Position
+SimulatorGUI --> DroneState
+SimulatorGUI --> FaultType
+SimulatorGUI --> ZoneManager
 
 @enduml

@@ -1,0 +1,36 @@
+@startuml
+title Timing Diagram: Watchdog Timeout (PACKET_LOSS)
+
+robust "Drone 2 State" as D2
+concise "Scheduler" as SCH
+robust "Watchdog Timer" as WD
+
+@0
+D2 is IDLE
+SCH is LISTENING
+WD is IDLE
+
+@1
+SCH is DISPATCHING
+SCH -> D2 : UDP [CMD:4:LOW:PACKET_LOSS]
+WD is RUNNING : Starts 30s countdown
+
+@2
+SCH is LISTENING
+D2 is EN_ROUTE : (Silently dropping STATUS packets)
+
+@31
+WD is TIMEOUT : 30 seconds elapsed!
+WD -> SCH : Trigger Timeout Exception
+
+@32
+SCH is HANDLING_TIMEOUT : Marks Drone 2 SOFT_FAULT
+WD is IDLE
+
+@33
+SCH is FAULT_RECOVERY : Strips fault & Re-queues mission
+SCH -> SCH : Dispatch to Drone 1
+
+@34
+SCH is LISTENING
+@enduml
