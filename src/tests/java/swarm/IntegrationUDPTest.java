@@ -257,8 +257,8 @@ public class IntegrationUDPTest {
             String status = new String(pkt.getData(), 0, pkt.getLength()).trim();
             String[] parts = status.split(":");
 
-            assertEquals(6, parts.length,
-                    "STATUS should have 6 parts, got: " + status);
+            assertEquals(7, parts.length,
+                    "STATUS should have 7 parts, got: " + status);
             assertDoesNotThrow(() -> Double.parseDouble(parts[4]), "posX must be a double");
             assertDoesNotThrow(() -> Double.parseDouble(parts[5]), "posY must be a double");
         } finally {
