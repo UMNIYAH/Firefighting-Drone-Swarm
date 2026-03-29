@@ -20,13 +20,13 @@ Defined fault types and extended the data model
 Extended input file format to support fault injection
 Submitted work to deliverables directories
 Updated README
-Updated UML diagrams
 
 Armin
 Rebuilt SimulatorGUI with a custom-painted MapCanvas replacing the old grid layout
 Added smooth interpolated drone movement with color-coded diamond markers
 Added state color legend and timestamped log entries
 Added white background behind drone text for readability
+Updated UML diagrams
 
 Liam
 Implemented validation testing for fault handling
