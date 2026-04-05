@@ -3,12 +3,12 @@ package swarm.subsystems;
 import swarm.infra.DroneConfig;
 import swarm.infra.UDPHelper;
 import swarm.infra.ZoneManager;
+import swarm.main.MetricsCollector;
 import swarm.main.SimulatorGUI;
 import swarm.messages.DroneState;
 import swarm.messages.FaultType;
 import swarm.model.Position;
 
-import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -21,7 +21,7 @@ import java.util.concurrent.*;
  * 3. Send commands to the DroneSubsystem(s)
  * 4. Receive and log drone status updates
  * 5. Detect and handle drone faults via watchdog timer
- *
+ * 6. Feed timestamps to MetricsCollector for performance tracking
  */
 public class Scheduler implements Runnable {
 
@@ -59,6 +59,10 @@ public class Scheduler implements Runnable {
 
     // Per-drone watchdog future; cancelled and rescheduled on every STATUS received
     private final Map<Integer, ScheduledFuture<?>> watchdogFutures = new ConcurrentHashMap<>();
+    private final MetricsCollector metrics = new MetricsCollector();
+
+    // Maps mission string ("zoneId:severity:faultType") -> MetricsCollector missionId
+    private final Map<String, Integer> missionIdMap = new ConcurrentHashMap<>();
 
     public Scheduler(UDPHelper udp, int numDrones, ZoneManager zoneManager) {
         this.udp         = udp;
@@ -69,6 +73,11 @@ public class Scheduler implements Runnable {
             dronePositions.put(i, new Position(0, 0));
             droneCompletedMissions.put(i, 0);
             droneAgentLiters.put(i, DroneConfig.AGENT_CAPACITY_LITERS);
+        }
+
+        MetricsCollector.instance = metrics;
+        for (int i = 1; i <= numDrones; i++) {
+            metrics.registerDrone(i);
         }
     }
 
@@ -120,8 +129,14 @@ public class Scheduler implements Runnable {
                     + " [" + severity + "] fault=" + faultStr);
         }
 
+        String mission = zoneId + ":" + severity + ":" + faultStr;
+
+        // Record in metrics and store the mapping
+        int missionId = metrics.recordFireDetected(zoneId, severity);
+        missionIdMap.put(mission, missionId);
+
         synchronized (missionQueue) {
-            missionQueue.add(zoneId + ":" + severity + ":" + faultStr);
+            missionQueue.add(mission);
         }
         tryDispatch();
     }
@@ -135,9 +150,13 @@ public class Scheduler implements Runnable {
             return;
         }
 
-        int       droneId = Integer.parseInt(parts[1]);
+        int        droneId = Integer.parseInt(parts[1]);
         DroneState state   = DroneState.valueOf(parts[2]);
-        int       zoneId  = Integer.parseInt(parts[3]);
+        int        zoneId  = Integer.parseInt(parts[3]);
+
+        // Record state transition for idle/flight time tracking (before overwriting droneStates)
+        DroneState previousState = droneStates.getOrDefault(droneId, DroneState.IDLE);
+        metrics.recordDroneStateChange(droneId, previousState.name(), state.name());
 
         // Position (fields 4 & 5) — where the drone currently is
         double posX = 0, posY = 0;
@@ -196,6 +215,9 @@ public class Scheduler implements Runnable {
         }
 
         switch (state) {
+            case ARRIVED -> {
+                metrics.recordDroneArrived(droneId);
+            }
             case DROPPING_AGENT -> {
                 // Deduct agent used for this mission
                 String activeMission = activeMissions.get(droneId);
@@ -210,6 +232,9 @@ public class Scheduler implements Runnable {
                 if (SimulatorGUI.instance != null)
                     SimulatorGUI.instance.updateDroneAgent(droneId,
                             droneAgentLiters.getOrDefault(droneId, 0));
+
+                // Record extinguish timestamp
+                metrics.recordFireExtinguished(droneId);
 
                 if (SimulatorGUI.instance != null)
                     SimulatorGUI.instance.clearZone(zoneId);
@@ -232,6 +257,9 @@ public class Scheduler implements Runnable {
                     if (SimulatorGUI.instance != null)
                         SimulatorGUI.instance.log("[Scheduler] Drone " + droneId + " recovered and idle.");
                 } else {
+                    // Normal completion: fire was extinguished
+                    metrics.recordMissionComplete(droneId);
+
                     if (SimulatorGUI.instance != null)
                         SimulatorGUI.instance.decrementFire();
                     droneCompletedMissions.merge(droneId, 1, Integer::sum);
@@ -389,6 +417,13 @@ public class Scheduler implements Runnable {
             try {
                 String cmd = "CMD:" + targetZone + ":" + severity + ":" + faultStr;
                 udp.send(cmd, dronePorts.get(droneId));
+
+                // Record intercept dispatch in metrics
+                Integer missionId = missionIdMap.get(bestMission);
+                if (missionId != null) {
+                    metrics.recordDroneDispatched(missionId, droneId);
+                }
+
                 System.out.println("[Scheduler] Drone " + droneId
                         + " intercepting Zone " + targetZone
                         + " [" + severity + "] while returning (agent=" + agentLeft + "L)");
@@ -478,6 +513,13 @@ public class Scheduler implements Runnable {
                 // CMD:zoneId:severity:faultType
                 String cmdMessage = "CMD:" + targetZoneId + ":" + severity + ":" + faultStr;
                 udp.send(cmdMessage, dronePort);
+
+                // Record dispatch in metrics
+                Integer missionId = missionIdMap.get(mission);
+                if (missionId != null) {
+                    metrics.recordDroneDispatched(missionId, bestDroneId);
+                }
+
                 System.out.println("[Scheduler] Dispatched Drone " + bestDroneId
                         + " → Zone " + targetZoneId
                         + " [" + severity + "] fault=" + faultStr);
