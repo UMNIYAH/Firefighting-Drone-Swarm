@@ -159,12 +159,26 @@ public class SimulatorGUI {
         logWrapper.add(logScroll, BorderLayout.CENTER);
         frame.add(logWrapper, BorderLayout.EAST);
 
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 5));
+
         JButton startButton = new JButton("Start Simulation");
         startButton.addActionListener(e -> {
             startButton.setEnabled(false);
             log("Simulation started.");
         });
-        frame.add(startButton, BorderLayout.SOUTH);
+        buttonPanel.add(startButton);
+
+        JButton metricsButton = new JButton("Show Metrics");
+        metricsButton.addActionListener(e -> {
+            if (MetricsCollector.instance != null) {
+                MetricsCollector.instance.printSummary();
+            } else {
+                log("Metrics not available yet.");
+            }
+        });
+        buttonPanel.add(metricsButton);
+
+        frame.add(buttonPanel, BorderLayout.SOUTH);
 
         frame.setSize(1150, 740);
         frame.setMinimumSize(new Dimension(950, 600));
