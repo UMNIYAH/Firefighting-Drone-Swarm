@@ -22,7 +22,6 @@ import java.util.concurrent.*;
  * 4. Receive and log drone status updates
  * 5. Detect and handle drone faults via watchdog timer
  *
- * Iteration 4: fault forwarding, watchdog timer, and en-route interception added.
  */
 public class Scheduler implements Runnable {
 
@@ -34,9 +33,9 @@ public class Scheduler implements Runnable {
 
     // Mission queue entries: "zoneId:severity:faultType"
     private final Queue<String> missionQueue = new LinkedList<>();
-    private final Map<Integer, Integer>     dronePorts           = new ConcurrentHashMap<>();
-    private final Map<Integer, DroneState>  droneStates          = new ConcurrentHashMap<>();
-    private final Map<Integer, Position>    dronePositions       = new ConcurrentHashMap<>();
+    private final Map<Integer, Integer>     dronePorts             = new ConcurrentHashMap<>();
+    private final Map<Integer, DroneState>  droneStates            = new ConcurrentHashMap<>();
+    private final Map<Integer, Position>    dronePositions         = new ConcurrentHashMap<>();
     private final Map<Integer, Integer>     droneCompletedMissions = new ConcurrentHashMap<>();
 
     // Active mission per drone: droneId -> "zoneId:severity:faultType"
@@ -148,7 +147,7 @@ public class Scheduler implements Runnable {
             dronePositions.put(droneId, new Position(posX, posY));
         }
 
-        // Fault type (field 6) — was incorrectly read from parts[4] in I3
+        // Fault type (field 6)
         FaultType fault = FaultType.NONE;
         if (parts.length >= 7) {
             try {
@@ -171,10 +170,6 @@ public class Scheduler implements Runnable {
             SimulatorGUI.instance.log("[Drone " + droneId + "] " + state + zoneText
                     + (fault != FaultType.NONE ? " [" + fault + "]" : ""));
 
-            // Compute destination and travel time so the GUI can animate smoothly.
-            // EN_ROUTE: current pos -> zone centre.
-            // RETURNING: current pos -> base.
-            // All other states: drone stays put (dest == current pos).
             double destX = posX, destY = posY;
             long   travelMs = 0;
 
@@ -192,7 +187,6 @@ public class Scheduler implements Runnable {
                 double dist = new Position(posX, posY).distanceTo(DroneConfig.BASE_POSITION);
                 travelMs = DroneConfig.travelTimeMillis(dist) / 10;
             } else if (state == DroneState.IDLE || state == DroneState.REFILLING) {
-                // Drone is back at base — snap diamond home instantly
                 SimulatorGUI.instance.snapDroneToBase(droneId);
             }
 
@@ -212,25 +206,32 @@ public class Scheduler implements Runnable {
                         droneAgentLiters.merge(droneId, -used, Integer::sum);
                     } catch (Exception ignored) {}
                 }
+                // Push updated agent level to GUI
+                if (SimulatorGUI.instance != null)
+                    SimulatorGUI.instance.updateDroneAgent(droneId,
+                            droneAgentLiters.getOrDefault(droneId, 0));
+
                 if (SimulatorGUI.instance != null)
                     SimulatorGUI.instance.clearZone(zoneId);
             }
             case REFILLING -> {
                 droneAgentLiters.put(droneId, DroneConfig.AGENT_CAPACITY_LITERS);
+                // Push refilled level to GUI
+                if (SimulatorGUI.instance != null)
+                    SimulatorGUI.instance.updateDroneAgent(droneId, DroneConfig.AGENT_CAPACITY_LITERS);
             }
             case IDLE -> {
                 activeMissions.remove(droneId);
                 droneAgentLiters.put(droneId, DroneConfig.AGENT_CAPACITY_LITERS);
+                // Push reset level to GUI
+                if (SimulatorGUI.instance != null)
+                    SimulatorGUI.instance.updateDroneAgent(droneId, DroneConfig.AGENT_CAPACITY_LITERS);
 
                 if (recoveringDrones.remove(droneId)) {
-                    // This IDLE is a self-recovery reset, not a mission completion.
-                    // The mission was already re-queued when SOFT_FAULT arrived.
-                    // Do NOT decrement the fire counter — the fire is still burning.
                     System.out.println("[Scheduler] Drone " + droneId + " recovery complete — ready for dispatch.");
                     if (SimulatorGUI.instance != null)
                         SimulatorGUI.instance.log("[Scheduler] Drone " + droneId + " recovered and idle.");
                 } else {
-                    // Normal completion: fire was extinguished.
                     if (SimulatorGUI.instance != null)
                         SimulatorGUI.instance.decrementFire();
                     droneCompletedMissions.merge(droneId, 1, Integer::sum);
@@ -239,10 +240,8 @@ public class Scheduler implements Runnable {
             }
             case HARD_FAULT -> handleHardFault(droneId, zoneId, fault);
             case SOFT_FAULT -> {
-                // Re-queue the aborted mission immediately (with fault cleared so it
-                // doesn't cascade to the next drone that picks it up).
                 recoveringDrones.add(droneId);
-                requeueActiveMission(droneId);   // clears activeMissions[droneId] too
+                requeueActiveMission(droneId);
                 System.out.println("[Scheduler] Drone " + droneId
                         + " SOFT_FAULT (" + fault + ") — mission re-queued, awaiting self-recovery.");
                 if (SimulatorGUI.instance != null)
@@ -289,7 +288,6 @@ public class Scheduler implements Runnable {
             SimulatorGUI.instance.markDroneFault(droneId, FaultType.DRONE_STUCK);
         }
 
-        // Reset drone to IDLE so it can receive new missions
         droneStates.put(droneId, DroneState.IDLE);
         requeueActiveMission(droneId);
         tryDispatch();
@@ -299,8 +297,7 @@ public class Scheduler implements Runnable {
     private void requeueActiveMission(int droneId) {
         String mission = activeMissions.remove(droneId);
         if (mission != null) {
-            // Strip the fault so it only fires once — re-queued attempts run clean.
-            String[] mp      = mission.split(":");
+            String[] mp         = mission.split(":");
             String cleanMission = mp[0] + ":" + mp[1] + ":" + FaultType.NONE.name();
             System.out.println("[Scheduler] Re-queuing mission (fault cleared): " + cleanMission
                     + " (was assigned to Drone " + droneId + ")");
@@ -317,7 +314,6 @@ public class Scheduler implements Runnable {
     private void resetWatchdog(int droneId, DroneState newState) {
         cancelWatchdog(droneId);
 
-        // No watchdog needed when idle or permanently offline
         if (newState == DroneState.IDLE
                 || newState == DroneState.HARD_FAULT
                 || offlineDrones.contains(droneId)) {
@@ -349,10 +345,9 @@ public class Scheduler implements Runnable {
         synchronized (missionQueue) {
             if (missionQueue.isEmpty()) return;
 
-            int    agentLeft = droneAgentLiters.getOrDefault(droneId, 0);
+            int    agentLeft    = droneAgentLiters.getOrDefault(droneId, 0);
             String bestMission  = null;
             double bestDist     = Double.MAX_VALUE;
-            int    bestRequired = 0;
 
             for (String mission : missionQueue) {
                 String[] mp = mission.split(":");
@@ -367,10 +362,6 @@ public class Scheduler implements Runnable {
                 Position zoneCenter = zoneManager.getZoneCenter(zoneId);
                 if (zoneCenter == null) continue;
 
-                // Check that the zone centre is geometrically between current pos
-                // and base (i.e. the drone would naturally pass near it).
-                // We use: dist(current, zone) + dist(zone, base) ≈ dist(current, base)
-                // with a tolerance of INTERCEPT_RADIUS_M.
                 double directDist  = current.distanceTo(base);
                 double detourDist  = current.distanceTo(zoneCenter) + zoneCenter.distanceTo(base);
                 double detourExtra = detourDist - directDist;
@@ -378,9 +369,8 @@ public class Scheduler implements Runnable {
                 if (detourExtra <= INTERCEPT_RADIUS_M) {
                     double d = current.distanceTo(zoneCenter);
                     if (d < bestDist) {
-                        bestDist     = d;
-                        bestMission  = mission;
-                        bestRequired = required;
+                        bestDist    = d;
+                        bestMission = mission;
                     }
                 }
             }
@@ -391,8 +381,6 @@ public class Scheduler implements Runnable {
             String[] mp      = bestMission.split(":");
             int   targetZone = Integer.parseInt(mp[0]);
             String severity  = mp[1];
-            // Re-queued missions always have NONE fault; original may still carry one
-            // but we never re-inject faults on intercepts
             String faultStr  = FaultType.NONE.name();
 
             droneStates.put(droneId, DroneState.EN_ROUTE);
@@ -419,16 +407,16 @@ public class Scheduler implements Runnable {
         }
     }
 
-    /** Finds an idle drone and dispatches it to the next queued mission. */
+    /** Finds an idle drone with sufficient agent and dispatches it to the next queued mission. */
     private void tryDispatch() {
         synchronized (missionQueue) {
             if (missionQueue.isEmpty()) return;
 
             // Peek at the target zone to calculate distances
-            String nextMission   = missionQueue.peek();
-            String[] mParts      = nextMission.split(":");
-            int    targetZoneId  = Integer.parseInt(mParts[0]);
-            Position targetPos   = zoneManager.getZoneCenter(targetZoneId);
+            String nextMission  = missionQueue.peek();
+            String[] mParts     = nextMission.split(":");
+            int    targetZoneId = Integer.parseInt(mParts[0]);
+            Position targetPos  = zoneManager.getZoneCenter(targetZoneId);
 
             if (targetPos == null) {
                 System.err.println("[Scheduler] Zone " + targetZoneId + " not found, discarding mission.");
@@ -436,9 +424,21 @@ public class Scheduler implements Runnable {
                 return;
             }
 
-            // Find closest idle drone (excluding hard-faulted ones), break ties by fewest missions
-            Integer bestDroneId  = null;
-            double  bestDistance = Double.MAX_VALUE;
+            // Resolve how many liters this mission requires up front so we
+            // can skip drones that don't have enough agent in the loop below.
+            int required;
+            try {
+                required = swarm.messages.Severity.valueOf(mParts[1]).litersRequired();
+            } catch (Exception e) {
+                System.err.println("[Scheduler] Unknown severity in mission: " + nextMission);
+                missionQueue.poll();
+                return;
+            }
+
+            // Find closest idle drone (excluding hard-faulted and under-stocked ones),
+            // break ties by fewest completed missions.
+            Integer bestDroneId   = null;
+            double  bestDistance  = Double.MAX_VALUE;
             int     bestCompleted = Integer.MAX_VALUE;
 
             for (Map.Entry<Integer, DroneState> entry : droneStates.entrySet()) {
@@ -446,19 +446,22 @@ public class Scheduler implements Runnable {
                 if (offlineDrones.contains(id)) continue;
                 if (entry.getValue() != DroneState.IDLE) continue;
 
-                Position dronePos = dronePositions.get(id);
-                double   dist     = dronePos.distanceTo(targetPos);
+                // Skip drones that don't carry enough agent for this mission
+                if (droneAgentLiters.getOrDefault(id, 0) < required) continue;
+
+                Position dronePos  = dronePositions.get(id);
+                double   dist      = dronePos.distanceTo(targetPos);
                 int      completed = droneCompletedMissions.getOrDefault(id, 0);
 
                 if (dist < bestDistance || (dist == bestDistance && completed < bestCompleted)) {
-                    bestDroneId  = id;
-                    bestDistance = dist;
+                    bestDroneId   = id;
+                    bestDistance  = dist;
                     bestCompleted = completed;
                 }
             }
 
             if (bestDroneId == null) {
-                System.out.println("[Scheduler] No idle drones available — mission queued.");
+                System.out.println("[Scheduler] No idle drones with sufficient agent — mission queued.");
                 return;
             }
 
@@ -483,13 +486,11 @@ public class Scheduler implements Runnable {
                     SimulatorGUI.instance.setZoneDrone(targetZoneId, bestDroneId);
                 }
 
-                // Start watchdog immediately upon dispatch
                 resetWatchdog(bestDroneId, DroneState.EN_ROUTE);
 
             } catch (Exception e) {
                 System.err.println("[Scheduler] Failed to dispatch Drone " + bestDroneId
                         + ": " + e.getMessage());
-                // Undo state changes and put mission back
                 missionQueue.add(mission);
                 activeMissions.remove(bestDroneId);
                 droneStates.put(bestDroneId, DroneState.IDLE);

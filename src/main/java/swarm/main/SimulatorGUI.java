@@ -112,7 +112,7 @@ public class SimulatorGUI {
         }
         zoneManager = tempZM;
 
-        JFrame frame = new JFrame("Firefighting Drone Simulator – Iteration 4");
+        JFrame frame = new JFrame("Firefighting Drone Simulator – Iteration 5");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setLayout(new BorderLayout(4, 4));
 
@@ -149,7 +149,6 @@ public class SimulatorGUI {
         logArea.setLineWrap(true);
         logArea.setWrapStyleWord(true);
         JScrollPane logScroll = new JScrollPane(logArea);
-        // Give the log a fixed preferred + minimum width
         Dimension logDim = new Dimension(250, 0);
         logScroll.setPreferredSize(logDim);
         logScroll.setMinimumSize(logDim);
@@ -186,7 +185,6 @@ public class SimulatorGUI {
         JPanel legend = new JPanel();
         legend.setLayout(new BoxLayout(legend, BoxLayout.Y_AXIS));
         legend.setBorder(BorderFactory.createTitledBorder("Legend"));
-        // Hard minimum so the log panel cannot push it off-screen
         legend.setPreferredSize(new Dimension(195, 0));
         legend.setMinimumSize(new Dimension(195, 0));
 
@@ -225,15 +223,11 @@ public class SimulatorGUI {
         private static final int PAD  = 24;
         private static final int HALF = 9; // diamond half-size
 
-        /** Fire icon loaded once; null if fire.png is not found next to the CSVs. */
         private final Image fireImage;
 
         MapCanvas(ZoneManager zm) {
             setBackground(new Color(235, 238, 245));
 
-            // Load fire.png from the working directory (same folder as the CSV files).
-            // ImageIcon handles the decode; getImage() gives us an AWT Image we can
-            // scale-draw with g2.drawImage().
             Image img = null;
             java.io.File f = new java.io.File("fire.png");
             if (f.exists()) {
@@ -291,8 +285,6 @@ public class SimulatorGUI {
                 g2.drawString("Z" + id, rx + 5, ry + 15);
 
                 if (fire) {
-                    // Draw fire.png centred in the zone, sized to 55% of the smaller dimension
-                    // so it scales automatically regardless of zone shape or window size.
                     if (fireImage != null) {
                         int iconSize = (int) (Math.min(rw, rh) * 0.55);
                         int imgX = rx + (rw - iconSize) / 2;
@@ -301,7 +293,6 @@ public class SimulatorGUI {
                                 RenderingHints.VALUE_INTERPOLATION_BICUBIC);
                         g2.drawImage(fireImage, imgX, imgY, iconSize, iconSize, null);
                     }
-                    // Severity label bottom-left, zone label already drawn top-left
                     g2.setColor(new Color(160, 0, 0));
                     g2.setFont(new Font("Arial", Font.BOLD, 11));
                     g2.drawString(zoneFireSeverity.get(id), rx + 5, ry + rh - 5);
@@ -316,7 +307,7 @@ public class SimulatorGUI {
             g2.setFont(new Font("Arial", Font.BOLD, 7));
             g2.drawString("BASE", bx - 11, by + 19);
 
-            // Drone diamonds — drawn at renderX/renderY (smoothly interpolated)
+            // Drone diamonds
             for (Map.Entry<Integer, DroneRenderState> e : droneRenderStates.entrySet()) {
                 int droneId = e.getKey();
                 DroneRenderState rs = e.getValue();
@@ -328,8 +319,7 @@ public class SimulatorGUI {
                 int dx = cx(rs.renderX), dy = cy(rs.renderY);
                 drawDiamond(g2, dx, dy, HALF, c);
 
-                // White Background behind text
-                g2.setColor(new  Color(255, 255,255, 200));
+                g2.setColor(new Color(255, 255, 255, 200));
                 g2.fillRoundRect(dx - 7, dy - HALF - 13, 22, 12, 4, 4);
 
                 g2.setColor(Color.DARK_GRAY);
@@ -384,9 +374,6 @@ public class SimulatorGUI {
         rs.state = state;
         rs.fault = fault;
 
-        // Place the render position at the current reported position first,
-        // then kick off interpolation toward the destination.
-        // (Only reset renderX/Y if the drone is not mid-animation — avoids jumps.)
         if (rs.stepX == 0 && rs.stepY == 0) {
             rs.renderX = currentX;
             rs.renderY = currentY;
@@ -403,7 +390,6 @@ public class SimulatorGUI {
         DroneRenderState rs = droneRenderStates.get(droneId);
         if (rs != null) rs.snapTo(0, 0);
     }
-
 
     /** Updates drone state and system monitor marker without changing the map position. */
     public void updateDroneInfo(int droneId, DroneState state, int zoneId, FaultType fault) {
@@ -446,6 +432,14 @@ public class SimulatorGUI {
         });
     }
 
+    // Updates the agent liters displayed in the drone's status marker ──
+    public void updateDroneAgent(int droneId, int agentLiters) {
+        SwingUtilities.invokeLater(() -> {
+            DroneMarker marker = droneMarkers.get(droneId);
+            if (marker != null) marker.updateAgent(agentLiters);
+        });
+    }
+
     public void setZoneOnFire(int zoneId, String severity) { zoneFireSeverity.put(zoneId, severity); }
     public void setZoneDrone(int zoneId, int droneId)      { /* diamond movement shows this */        }
     public void clearZone(int zoneId)                      { zoneFireSeverity.remove(zoneId);         }
@@ -481,6 +475,7 @@ public class SimulatorGUI {
     private static class DroneMarker extends JPanel {
         private final JLabel diamond;
         private final JLabel label;
+        private final JLabel agentLabel; // NEW: shows remaining agent liters
         private final int    id;
 
         DroneMarker(int id) {
@@ -502,6 +497,12 @@ public class SimulatorGUI {
             label = new JLabel("Drone " + id + ": IDLE");
             label.setFont(new Font("Arial", Font.BOLD, 12));
             add(label);
+
+            // Agent label, shown in a muted colour so it doesn't compete with state text
+            agentLabel = new JLabel("[30L]");
+            agentLabel.setFont(new Font("Arial", Font.PLAIN, 11));
+            agentLabel.setForeground(new Color(80, 80, 80));
+            add(agentLabel);
         }
 
         void update(String stateText, Color color) {
@@ -511,6 +512,12 @@ public class SimulatorGUI {
             int g = (color.getGreen() + 9 * 245) / 10;
             int b = (color.getBlue()  + 9 * 245) / 10;
             setBackground(new Color(Math.min(255,r), Math.min(255,g), Math.min(255,b)));
+            repaint();
+        }
+
+        // Called whenever the Scheduler's droneAgentLiters map changes for this drone
+        void updateAgent(int liters) {
+            agentLabel.setText("[" + liters + "L]");
             repaint();
         }
     }
