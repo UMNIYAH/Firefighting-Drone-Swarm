@@ -48,7 +48,7 @@ public final class DroneConfig {
      */
     public static long travelTimeMillis(double distanceMeters) {
 
-        if(TEST_MODE) return 5;
+        if(TEST_MODE) return 500;
 
         double accelDecelDist = TAKEOFF_DIST_M + LANDING_DIST_M;
         double totalSeconds;
@@ -69,7 +69,7 @@ public final class DroneConfig {
      */
     public static long dropTimeMillis(int litersRequired) {
 
-        if(TEST_MODE) return 5;
+        if(TEST_MODE) return 500;
 
         double seconds = litersRequired / DROP_RATE_LPS;
         return (long) (seconds * 1000);
@@ -77,7 +77,7 @@ public final class DroneConfig {
 
     public static long doorOpenCloseMillis()
     {
-        if(TEST_MODE) return 2;
+        if(TEST_MODE) return 200;
 
         return (long) ((DOOR_OPEN_TIME_S + DOOR_CLOSE_TIME_S) * 1000);
     }
