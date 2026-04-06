@@ -1,28 +1,18 @@
 @startuml
-skinparam classAttributeIconSize 0
-hide circle
 
 ' Packages
 package "swarm.infra" {
   class DroneConfig <<final>> {
     {static} +AGENT_CAPACITY_LITERS: int
     {static} +BASE_POSITION: Position
-    {static} +travelTimeMillis(distanceMeters: double): long
-    {static} +dropTimeMillis(litersRequired: int): long
-    {static} +doorOpenCloseMillis(): long
   }
 
   class UDPHelper {
-    -socket: DatagramSocket
-    -port: int
-    +UDPHelper(port: int)
     +send(message: String, destPort: int): void
     +receive(): String
   }
 
   class ZoneManager {
-    -zones: Map<Integer, Zone>
-    +ZoneManager(zoneFilePath: String)
     +getZone(id: int): Zone
     +getZoneCenter(id: int): Position
   }
@@ -33,31 +23,50 @@ package "swarm.main" {
     +{static} instance: SimulatorGUI
     -zoneManager: ZoneManager
     +SimulatorGUI()
-    +log(msg: String): void
+    +updateDroneAgent(droneId: int, agentLiters: int): void
+    +markDroneFault(droneId: int, fault: FaultType): void
     +updateDroneMovement(...): void
     +updateDroneInfo(...): void
-    +markDroneFault(droneId: int, fault: FaultType): void
     +setZoneOnFire(zoneId: int, severity: String): void
     +clearZone(zoneId: int): void
+    +log(msg: String): void
   }
 
-  class MapCanvas <<inner>> {
-    +paintComponent(g: Graphics): void
-  }
-
-  class DroneRenderState <<inner>> {
-    +state: DroneState
-    +fault: FaultType
-    +tick(): void
-  }
+  class MapCanvas <<inner>>
+  class DroneRenderState <<inner>>
 
   class DroneMarker <<inner>> {
-    +update(stateText: String, color: Color): void
+    -agentLabel: JLabel
+    +updateAgent(liters: int): void
   }
 
   class Launcher {
     +main(args: String[]): void
   }
+
+  class MetricsCollector {
+    +{static} instance: MetricsCollector
+    -missionRecords: Map
+    -droneRecords: Map
+    -droneToMission: Map
+    -firstFireDetectedMs: long
+    -lastFireExtinguishedMs: long
+    +recordFireDetected(...): int
+    +recordDroneDispatched(...)
+    +recordDroneArrived(id: int): void
+    +recordFireExtinguished(id: int): void
+    +recordMissionComplete(id: int): void
+    +recordDroneStateChange(...)
+    +avgResponseTimeMs(): double
+    +avgExtinguishTimeMs(): double
+    +totalIncidentToAllClearMs(): long
+    +avgDroneFlightTimeMs(): double
+    +buildSummary(): String
+    +printSummary(): void
+  }
+
+  class MissionRecord <<inner>>
+  class DroneTimeRecord <<inner>>
 }
 
 package "swarm.messages" {
@@ -66,7 +75,6 @@ package "swarm.messages" {
     DRONE_STUCK
     NOZZLE_JAMMED
     PACKET_LOSS
-    +isHardFault(): boolean
   }
 
   enum DroneState {
@@ -84,65 +92,46 @@ package "swarm.messages" {
     FIRE_DETECTED
   }
 
-  class FireEvent <<record>> {
-    +timestampMillis: long
-    +zoneId: int
-    +type: EventType
-    +severity: Severity
-    +fault: FaultType
-    +timestamp(): Instant
-  }
-
   enum Severity {
     LOW
     MODERATE
     HIGH
     +litersRequired(): int
   }
+
+  class FireEvent <<record>> {
+    +zoneId: int
+    +severity: Severity
+    +fault: FaultType
+  }
 }
 
 package "swarm.model" {
-  class Position <<record>> {
-    +x: double
-    +y: double
-    +distanceTo(other: Position): double
-  }
-  class Zone <<record>> {
-    +id: int
-    +start: Position
-    +end: Position
-    +center(): Position
-  }
+  class Position <<record>>
+  class Zone <<record>>
 }
 
 package "swarm.subsystems" {
   class DroneSubsystem {
     -udp: UDPHelper
     -droneId: int
-    -zoneManager: ZoneManager
     -hardFaulted: boolean
     +run(): void
-    -processMissions(): void
     -executeMission(...): void
-    -reportStatus(...): void
   }
 
   class FireIncidentSubsystem {
     -udp: UDPHelper
-    -inputFileName: String
     +run(): void
-    -readIncidents(): void
   }
 
   class Scheduler {
     -udp: UDPHelper
+    -metrics: MetricsCollector
     -missionQueue: Queue<FireEvent>
-    -dispatchTimes: Map<Integer, Long>
-    -offlineDrones: Set<Integer>
     +run(): void
-    -handleMessage(msg: String): void
     -tryDispatch(): void
-    -startWatchdogTimer(): void
+    -handleMessage(msg: String): void
   }
 }
 
@@ -158,11 +147,17 @@ Launcher --> SimulatorGUI
 SimulatorGUI +-- MapCanvas
 SimulatorGUI +-- DroneRenderState
 SimulatorGUI +-- DroneMarker
+MetricsCollector +-- MissionRecord
+MetricsCollector +-- DroneTimeRecord
 
 ' Subsystems use UDP for communication
 FireIncidentSubsystem --> UDPHelper
 Scheduler --> UDPHelper
 DroneSubsystem --> UDPHelper
+
+' Iteration 5 Metrics Dependencies
+Scheduler --> MetricsCollector
+SimulatorGUI ..> MetricsCollector
 
 ' Domain Models
 DroneSubsystem --> ZoneManager

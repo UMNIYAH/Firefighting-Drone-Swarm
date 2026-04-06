@@ -55,6 +55,20 @@ The project follows an iterative and incremental development process. GitHub Iss
 - Added en-route interception logic for returning drones
 - Updated zone CSV to full 3×3 grid (9 zones)
 
+### Team Contribution - Iteration 5
+#### Umniyah
+- Implemented the MetricsCollector singleton to compute and summarize Iteration 5 performance metrics
+- Integrated timestamp tracking across the Scheduler and GUI
+#### Armin
+- Updated system architecture UML diagrams to reflect Iteration 5 changes
+- Updated README documentation
+#### Liam
+- Implemented validation test suites for Iteration 5 features (Agent Capacity and Performance Metrics)
+#### Vincent
+- Implemented agent capacity limits and constraints
+- Updated GUI drone markers to display live agent capacity
+- Modified Scheduler dispatch logic to skip drones with insufficient payloads
+
 ---
 ## Setup Instructions
 
@@ -102,7 +116,7 @@ git clone https://github.com/UMNIYAH/Firefighting-Drone-Swarm.git
 
 ## Testing Instructions
 
-1. Open the test directory under `Deliverables/I2/src/main/tests/` in IntelliJ.
+1. Open the test directory under `Deliverables/I5/src/main/tests/` in IntelliJ.
 2. Right-click the test package.
 3. Select **Run All Tests**.
 
@@ -111,9 +125,9 @@ git clone https://github.com/UMNIYAH/Firefighting-Drone-Swarm.git
 ## System Architecture
 
 All subsystems communicate via UDP using a simple text-based protocol:
-* `FIRE:<zoneId>:<severity>:<eventType>` - Fire events sent to Scheduler (port 5000)
-* `CMD:<zoneId>:<severity>` - Commands sent from Scheduler to Drone (port 6000 + droneId)
-* `STATUS:<droneId>:<state>:<zoneId>:<posX>:<posY>` - Status updates sent from Drone to Scheduler (port 5000)
+* `FIRE:<zoneId>:<severity>:<eventType>:<fault>` - Fire events sent to Scheduler (port 5000)
+* `CMD:<zoneId>:<severity>:<fault>` - Commands sent from Scheduler to Drone (port 6000 + droneId)
+* `STATUS:<droneId>:<state>:<zoneId>:<posX>:<posY>:<fault>` - Status updates sent from Drone to Scheduler (port 5000)
 
 ---
 
@@ -126,7 +140,7 @@ The Scheduler acts as the central coordination system.
 Responsibilities:
 * Receives fire events from the Fire Incident Subsystem via UDP
 * Maintains a mission queue for pending fire incidents
-* Dispatches the **closest idle drone** to the fire zone
+* Dispatches the closest idle drone that carries sufficient agent capacity to the fire zone
 * Balances workload across drones using completed mission count as a tiebreaker
 * Tracks drone positions, states, and ports
 * Receives drone status updates and re-dispatches queued missions when drones become idle
@@ -142,6 +156,7 @@ Responsibilities:
 * Returns to base and refills agent capacity
 * Reports status and position back to the Scheduler after each state transition
 * Drone state lifecycle: `IDLE → EN_ROUTE → ARRIVED → DROPPING_AGENT → RETURNING → REFILLING → IDLE`
+* Tracks and depletes its internal agent payload based on mission severity
 
 ### Fire Incident Subsystem
 
@@ -162,6 +177,17 @@ Responsibilities:
 * Displays per-drone state and current zone assignment
 * Tracks active incident count
 * Logs all subsystem events in a scrollable log panel
+* Displays dynamic drone markers including live agent capacity readouts
+* Interactive "Show Metrics" console trigger
+
+### Metrics Collector
+
+A performance tracking singleton managed by the main system.
+
+Responsibilities:
+* Records critical timestamps throughout the simulation lifecycle (detect, dispatch, arrive, extinguish)
+* Calculates average response times, extinguish times, and total incident to all clear durations
+* Tracks per drone metrics including total flight time, total idle time, and completed missions
 
 ### Launcher
 
@@ -192,6 +218,7 @@ Firefighting-Drone-Swarm/
 │               │
 │               ├── main/          
 │               │   ├── Launcher.java
+│               │   ├── MetricsCollector.java
 │               │   └── SimulatorGUI.java
 │               │
 │               ├── messages/      
@@ -199,6 +226,7 @@ Firefighting-Drone-Swarm/
 │               │   ├── DroneState.java
 │               │   ├── DroneStatus.java
 │               │   ├── EventType.java
+│               │   ├── FaultType.java
 │               │   ├── FireEvent.java
 │               │   └── Severity.java
 │               │
