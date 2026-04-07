@@ -50,6 +50,15 @@ public class Scheduler implements Runnable {
     // Remaining agent (litres) per drone — decremented on DROPPING_AGENT, reset on REFILLING
     private final Map<Integer, Integer> droneAgentLiters = new ConcurrentHashMap<>();
 
+    // Battery as a percentage 0–100; decremented per flight leg, reset on REFILLING/IDLE
+    private final Map<Integer, Integer> droneBatteryPct = new ConcurrentHashMap<>();
+
+    // Max one-way range in meters (used to compute battery drain per leg)
+    private static final double MAX_RANGE_M = 5_000.0;
+
+    // Tracks how many active fire incidents exist per zone (cleared only when count → 0)
+    private final Map<Integer, Integer> zoneFireCount = new ConcurrentHashMap<>();
+
     private final ScheduledExecutorService watchdogExecutor =
             Executors.newScheduledThreadPool(1, r -> {
                 Thread t = new Thread(r, "Watchdog");
@@ -73,6 +82,7 @@ public class Scheduler implements Runnable {
             dronePositions.put(i, new Position(0, 0));
             droneCompletedMissions.put(i, 0);
             droneAgentLiters.put(i, DroneConfig.AGENT_CAPACITY_LITERS);
+            droneBatteryPct.put(i, 100);
         }
 
         MetricsCollector.instance = metrics;
@@ -134,6 +144,8 @@ public class Scheduler implements Runnable {
         // Record in metrics and store the mapping
         int missionId = metrics.recordFireDetected(zoneId, severity);
         missionIdMap.put(mission, missionId);
+
+        zoneFireCount.merge(zoneId, 1, Integer::sum);
 
         synchronized (missionQueue) {
             missionQueue.add(mission);
@@ -218,6 +230,11 @@ public class Scheduler implements Runnable {
             case ARRIVED -> {
                 metrics.recordDroneArrived(droneId);
             }
+            case RETURNING -> {
+                // Drain battery for the return leg (zone → base) when the drone starts heading home
+                double returnDist = new Position(posX, posY).distanceTo(DroneConfig.BASE_POSITION);
+                drainBattery(droneId, returnDist);
+            }
             case DROPPING_AGENT -> {
                 // Deduct agent used for this mission
                 String activeMission = activeMissions.get(droneId);
@@ -236,21 +253,32 @@ public class Scheduler implements Runnable {
                 // Record extinguish timestamp
                 metrics.recordFireExtinguished(droneId);
 
-                if (SimulatorGUI.instance != null)
-                    SimulatorGUI.instance.clearZone(zoneId);
+                // Only clear the zone visual when all queued fires for it are extinguished
+                int remaining = zoneFireCount.merge(zoneId, -1, Integer::sum);
+                if (remaining <= 0) {
+                    zoneFireCount.remove(zoneId);
+                    if (SimulatorGUI.instance != null)
+                        SimulatorGUI.instance.clearZone(zoneId);
+                }
             }
             case REFILLING -> {
                 droneAgentLiters.put(droneId, DroneConfig.AGENT_CAPACITY_LITERS);
+                droneBatteryPct.put(droneId, 100);
                 // Push refilled level to GUI
-                if (SimulatorGUI.instance != null)
+                if (SimulatorGUI.instance != null) {
                     SimulatorGUI.instance.updateDroneAgent(droneId, DroneConfig.AGENT_CAPACITY_LITERS);
+                    SimulatorGUI.instance.updateDroneBattery(droneId, 100);
+                }
             }
             case IDLE -> {
                 activeMissions.remove(droneId);
                 droneAgentLiters.put(droneId, DroneConfig.AGENT_CAPACITY_LITERS);
+                droneBatteryPct.put(droneId, 100);
                 // Push reset level to GUI
-                if (SimulatorGUI.instance != null)
+                if (SimulatorGUI.instance != null) {
                     SimulatorGUI.instance.updateDroneAgent(droneId, DroneConfig.AGENT_CAPACITY_LITERS);
+                    SimulatorGUI.instance.updateDroneBattery(droneId, 100);
+                }
 
                 if (recoveringDrones.remove(droneId)) {
                     System.out.println("[Scheduler] Drone " + droneId + " recovery complete — ready for dispatch.");
@@ -433,6 +461,11 @@ public class Scheduler implements Runnable {
                     SimulatorGUI.instance.setZoneDrone(targetZone, droneId);
                 }
                 resetWatchdog(droneId, DroneState.EN_ROUTE);
+
+                // Drain battery for the detour leg (current position → intercept zone)
+                Position zoneCenter = zoneManager.getZoneCenter(targetZone);
+                if (zoneCenter != null) drainBattery(droneId, current.distanceTo(zoneCenter));
+
             } catch (Exception e) {
                 System.err.println("[Scheduler] Intercept dispatch failed: " + e.getMessage());
                 missionQueue.add(bestMission);
@@ -440,6 +473,18 @@ public class Scheduler implements Runnable {
                 droneStates.put(droneId, DroneState.RETURNING);
             }
         }
+    }
+
+    /**
+     * Deducts battery for a full flight leg (origin → dest → base round-trip cost)
+     * and pushes the updated percentage to the GUI.
+     */
+    private void drainBattery(int droneId, double flightDistMeters) {
+        int drain = (int) Math.round((flightDistMeters / MAX_RANGE_M) * 100.0);
+        int newBat = Math.max(0, droneBatteryPct.getOrDefault(droneId, 100) - drain);
+        droneBatteryPct.put(droneId, newBat);
+        if (SimulatorGUI.instance != null)
+            SimulatorGUI.instance.updateDroneBattery(droneId, newBat);
     }
 
     /** Finds an idle drone with sufficient agent and dispatches it to the next queued mission. */
@@ -529,6 +574,11 @@ public class Scheduler implements Runnable {
                 }
 
                 resetWatchdog(bestDroneId, DroneState.EN_ROUTE);
+
+                // Drain battery for the outbound leg (base → zone) immediately on dispatch
+                Position dronePos = dronePositions.getOrDefault(bestDroneId, DroneConfig.BASE_POSITION);
+                double outboundDist = dronePos.distanceTo(targetPos);
+                drainBattery(bestDroneId, outboundDist);
 
             } catch (Exception e) {
                 System.err.println("[Scheduler] Failed to dispatch Drone " + bestDroneId

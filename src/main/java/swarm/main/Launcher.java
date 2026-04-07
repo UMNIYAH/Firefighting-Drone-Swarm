@@ -15,7 +15,7 @@ import javax.swing.*;
 public class Launcher {
 
     public static void main(String[] args) {
-        int numDrones = args.length > 0 ? Integer.parseInt(args[0]) : 1;
+        int numDrones = args.length > 0 ? Integer.parseInt(args[0]) : 10;
 
         // 1. Start GUI (on the Swing thread)
         SwingUtilities.invokeLater(SimulatorGUI::new);
