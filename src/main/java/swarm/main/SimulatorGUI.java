@@ -454,6 +454,14 @@ public class SimulatorGUI {
         });
     }
 
+    // Updates the battery percentage displayed in the drone's status marker ──
+    public void updateDroneBattery(int droneId, int batteryPct) {
+        SwingUtilities.invokeLater(() -> {
+            DroneMarker marker = droneMarkers.get(droneId);
+            if (marker != null) marker.updateBattery(batteryPct);
+        });
+    }
+
     public void setZoneOnFire(int zoneId, String severity) { zoneFireSeverity.put(zoneId, severity); }
     public void setZoneDrone(int zoneId, int droneId)      { /* diamond movement shows this */        }
     public void clearZone(int zoneId)                      { zoneFireSeverity.remove(zoneId);         }
@@ -490,6 +498,7 @@ public class SimulatorGUI {
         private final JLabel diamond;
         private final JLabel label;
         private final JLabel agentLabel; // NEW: shows remaining agent liters
+        private final JLabel batteryLabel; // NEW: shows remaining battery percentage
         private final int    id;
 
         DroneMarker(int id) {
@@ -517,6 +526,12 @@ public class SimulatorGUI {
             agentLabel.setFont(new Font("Arial", Font.PLAIN, 11));
             agentLabel.setForeground(new Color(80, 80, 80));
             add(agentLabel);
+
+            // Battery label, colour-coded green → yellow → red as charge drops
+            batteryLabel = new JLabel("BAT:100%");
+            batteryLabel.setFont(new Font("Arial", Font.PLAIN, 11));
+            batteryLabel.setForeground(new Color(40, 120, 40));
+            add(batteryLabel);
         }
 
         void update(String stateText, Color color) {
@@ -532,6 +547,19 @@ public class SimulatorGUI {
         // Called whenever the Scheduler's droneAgentLiters map changes for this drone
         void updateAgent(int liters) {
             agentLabel.setText("[" + liters + "L]");
+            repaint();
+        }
+
+        // Called whenever the Scheduler's droneBatteryPct map changes for this drone
+        void updateBattery(int pct) {
+            batteryLabel.setText("BAT:" + pct + "%");
+            // Colour transitions: green → yellow → red
+            Color c = pct > 50
+                    ? new Color(40, 120, 40)
+                    : pct > 20
+                    ? new Color(180, 130, 0)
+                    : new Color(200, 30, 30);
+            batteryLabel.setForeground(c);
             repaint();
         }
     }
